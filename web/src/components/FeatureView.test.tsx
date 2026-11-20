@@ -180,9 +180,9 @@ describe('FeatureView — chip ARIA attributes', () => {
 // ---------------------------------------------------------------------------
 
 describe('FeatureView — add-feature popover trigger', () => {
-  it('renders the Add feature button', () => {
+  it('renders the catalog ("Další operace") button', () => {
     const html = render()
-    expect(html).toContain('Add feature')
+    expect(html).toContain('Další operace')
   })
 
   it('trigger has aria-haspopup="menu"', () => {
@@ -196,9 +196,9 @@ describe('FeatureView — add-feature popover trigger', () => {
     expect(html).toMatch(/aria-expanded="false"/)
   })
 
-  it('trigger has aria-label="Add feature to timeline"', () => {
+  it('trigger has a descriptive aria-label', () => {
     const html = render()
-    expect(html).toMatch(/aria-label="Add feature to timeline"/)
+    expect(html).toMatch(/aria-label="Další operace — celý katalog prvků"/)
   })
 })
 

@@ -6715,7 +6715,7 @@ function AddFeaturePopover({ onPick }: { onPick: (op: string) => void }) {
         ref={triggerRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
-        aria-label="Add feature to timeline"
+        aria-label="Další operace — celý katalog prvků"
         aria-expanded={open}
         aria-haspopup="menu"
         className={`inline-flex items-center gap-1.5 pl-2 pr-2.5 py-1.5 rounded-md border text-xs font-medium transition-colors
@@ -6726,7 +6726,7 @@ function AddFeaturePopover({ onPick }: { onPick: (op: string) => void }) {
         title="Add a feature to the timeline"
       >
         <Plus size={13} aria-hidden="true" className={open ? 'text-kerf-200' : 'text-kerf-300'} />
-        <span>Add feature</span>
+        <span>Další operace</span>
         <ChevronDown
           size={11}
           aria-hidden="true"
@@ -6739,7 +6739,7 @@ function AddFeaturePopover({ onPick }: { onPick: (op: string) => void }) {
           ref={menuRef}
           className="absolute top-full left-0 mt-1.5 z-30 w-[min(420px,calc(100vw-2rem))] rounded-lg border border-ink-700 bg-ink-900 shadow-2xl shadow-black/60 overflow-hidden"
           role="menu"
-          aria-label="Add feature"
+          aria-label="Katalog prvků"
           onKeyDown={handleMenuKeyDown}
         >
           <div className="max-h-[70vh] overflow-y-auto py-1.5">
