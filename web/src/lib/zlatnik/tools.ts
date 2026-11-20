@@ -69,12 +69,38 @@ export function ringTopRadius(tree: ToolNode[]): number | null {
   return ring ? ringOuterRadius(ring) : null
 }
 
-/** Last node that produces a solid body (for modify-type tools). */
-function lastBodyId(tree: ToolNode[]): string {
-  for (let i = tree.length - 1; i >= 0; i--) {
-    if (!tree[i].suppressed && tree[i].op !== 'boolean') return tree[i].id
+const CUTTER_OPS = new Set(['gem_seat', 'bezel_seat', 'fishtail_seat', 'channel_seat'])
+
+/**
+ * Bodies that exist after evaluating the tree, in order: a boolean consumes
+ * its two operands and becomes a body itself. Suppressed nodes are skipped.
+ */
+export function liveBodies(tree: ToolNode[]): ToolNode[] {
+  const live: ToolNode[] = []
+  for (const n of tree) {
+    if (n.suppressed) continue
+    if (n.op === 'boolean') {
+      for (let i = live.length - 1; i >= 0; i--) {
+        if (live[i].id === n.target_a_id || live[i].id === n.target_b_id) live.splice(i, 1)
+      }
+    } else if (['polar_pattern', 'linear_pattern', 'mirror_pattern', 'fillet', 'chamfer', 'shell'].includes(n.op)) {
+      // in-place modifiers: replace the body they act on (the current one)
+      if (live.length) live.pop()
+    }
+    live.push(n)
   }
-  return tree.length ? tree[tree.length - 1].id : ''
+  return live
+}
+
+/** Live metal bodies — no gemstones, no seat cutters. */
+export function metalBodies(tree: ToolNode[]): ToolNode[] {
+  return liveBodies(tree).filter((n) => n.op !== 'gemstone' && !CUTTER_OPS.has(n.op))
+}
+
+/** The metal body modify-type tools act on (last one), or ''. */
+function lastMetalId(tree: ToolNode[]): string {
+  const m = metalBodies(tree)
+  return m.length ? m[m.length - 1].id : ''
 }
 
 // How far a setting's base is sunk into the shank so the two fuse cleanly.
@@ -114,7 +140,7 @@ function solitairePreset(ctx: ToolContext, kind: 'prong' | 'bezel'): ToolNode[] 
 }
 
 function cutSeatPreset(ctx: ToolContext): ToolNode[] {
-  const host = lastBodyId(ctx.tree)
+  const host = lastMetalId(ctx.tree)
   const seat = onRing(ctx, { id: ctx.newId('gem_seat'), op: 'gem_seat', cut: 'round_brilliant', diameter_mm: 2.0, girdle_clearance_mm: 0.05, through_hole: false }, SINK_MM)
   const out: ToolNode[] = [seat]
   if (host) out.push({ id: ctx.newId('boolean'), op: 'boolean', target_a_id: host, target_b_id: seat.id, kind: 'cut' })
@@ -123,15 +149,18 @@ function cutSeatPreset(ctx: ToolContext): ToolNode[] {
 
 function booleanTool(kind: 'cut' | 'fuse' | 'common') {
   return (ctx: ToolContext): ToolNode[] => {
-    const bodies = ctx.tree.filter((n) => !n.suppressed && n.op !== 'boolean')
-    const a = bodies.length >= 2 ? bodies[bodies.length - 2].id : ''
+    // A = the last metal body, B = the last other body (a cutter, a solid,
+    // another setting). Gemstones are never boolean operands by default.
+    const bodies = liveBodies(ctx.tree).filter((n) => n.op !== 'gemstone')
     const b = bodies.length >= 1 ? bodies[bodies.length - 1].id : ''
+    const metal = metalBodies(ctx.tree).filter((n) => n.id !== b)
+    const a = metal.length ? metal[metal.length - 1].id : (bodies.length >= 2 ? bodies[bodies.length - 2].id : '')
     return [{ id: ctx.newId('boolean'), op: 'boolean', target_a_id: a, target_b_id: b, kind }]
   }
 }
 
 function modifyTool(op: string, defaults: Record<string, unknown>) {
-  return (ctx: ToolContext): ToolNode[] => [{ id: ctx.newId(op), op, target_id: lastBodyId(ctx.tree), ...defaults }]
+  return (ctx: ToolContext): ToolNode[] => [{ id: ctx.newId(op), op, target_id: lastMetalId(ctx.tree), ...defaults }]
 }
 
 // ── Catalog ───────────────────────────────────────────────────────────────────

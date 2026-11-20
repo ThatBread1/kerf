@@ -76,3 +76,31 @@ describe('goldsmith tool palette', () => {
     expect(big - small).toBeCloseTo(10 / Math.PI / 2, 4)
   })
 })
+
+describe('tool targets', () => {
+  it('cut seat after a solitaire cuts the fused metal, never the stone', () => {
+    const sol = ALL_TOOLS.find((t) => t.id === 'solitaire')!.make({ tree: [], newId })
+    const nodes = ALL_TOOLS.find((t) => t.id === 'seat-cut')!.make({ tree: sol, newId })
+    const fuse = sol.find((n) => n.op === 'boolean')!
+    const cut = nodes.find((n) => n.op === 'boolean')!
+    expect(cut.target_a_id).toBe(fuse.id)
+    expect(cut.target_b_id).toBe(nodes[0].id)
+    expect(nodes[0].on_ring).toBe(sol[0].id)
+  })
+  it('liveBodies replaces boolean operands with the result', async () => {
+    const { liveBodies, metalBodies } = await import('./tools')
+    const t: ToolNode[] = [
+      { id: 'r', op: 'ring_shank' }, { id: 'h', op: 'jewelry_prong_head' },
+      { id: 'u', op: 'boolean', target_a_id: 'r', target_b_id: 'h', kind: 'fuse' }, { id: 'g', op: 'gemstone' },
+    ]
+    expect(liveBodies(t).map((n) => n.id)).toEqual(['u', 'g'])
+    expect(metalBodies(t).map((n) => n.id)).toEqual(['u'])
+  })
+  it('Odečíst picks the metal body as A and the newest body as B', () => {
+    const t: ToolNode[] = [
+      { id: 'r', op: 'ring_shank' }, { id: 'g', op: 'gemstone' }, { id: 's', op: 'primitive', shape: 'sphere' },
+    ]
+    const cut = ALL_TOOLS.find((x) => x.id === 'cut')!.make({ tree: t, newId })[0]
+    expect(cut).toMatchObject({ target_a_id: 'r', target_b_id: 's' })
+  })
+})

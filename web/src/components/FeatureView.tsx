@@ -49,7 +49,7 @@ import FeatureRenderer from './FeatureRenderer.jsx'
 import type { FeatureRendererHandle, ViewName } from './FeatureRenderer'
 import { ZlPanel, ZlIconButton, FeatureTreePanel, ToolPalette, PlacementSection } from './zlatnik/ZlPanels'
 import { opLabel, fieldLabel, optionLabel, opHint } from '../lib/zlatnik/cs'
-import type { ToolDef } from '../lib/zlatnik/tools'
+import { liveBodies, type ToolDef } from '../lib/zlatnik/tools'
 import { metalVolume, metalWeight, formatGrams, METAL_SHORT, bodyToGeometry, isGemBody } from '../lib/zlatnik/meshInfo'
 import { exportParts, downloadBlob, sanitizeFilename } from '../lib/exporters.js'
 import { Check, Undo2, Redo2, HelpCircle, Focus, FileDown, Scale } from 'lucide-react'
@@ -6152,7 +6152,8 @@ export default function FeatureView({
     return map
   }, [meshes, tree, metal])
 
-  const bodyCount = useMemo(() => tree.filter((n) => !n.suppressed && n.op !== 'boolean').length, [tree])
+  // Bodies a modify tool can work on (boolean results replace their operands; stones excluded).
+  const bodyCount = useMemo(() => liveBodies(tree as never).filter((n) => n.op !== 'gemstone').length, [tree])
 
   const setView = useCallback((v: ViewName) => rendererRef.current?.setView(v), [])
 
