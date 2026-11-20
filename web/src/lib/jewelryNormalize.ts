@@ -227,3 +227,29 @@ export function normalizeJewelryNode<T extends object>(node: T): T & Node {
     return node as T & Node
   }
 }
+
+// ── Ring anchoring ───────────────────────────────────────────────────────────
+// A setting / stone / seat placed "on the ring" stores `on_ring: <shank id>`
+// and a place_y that is RELATIVE to the top of that shank. Resolving it at
+// evaluation time keeps the head on the ring when the ring size, wall
+// thickness or position changes.
+
+/** Outer radius (mm) of a ring_shank node, including its own Y offset. */
+export function ringOuterRadius(ring: Node): number {
+  const n = normalizeJewelryNode(ring)
+  const od = Number(n.outer_diameter_mm)
+  const base = Number.isFinite(od) && od > 0
+    ? od / 2
+    : (Number(n.inner_diameter_mm) || 17.32) / 2 + (Number(n.thickness_mm) || 1.8)
+  return base + (Number(ring.place_y) || 0)
+}
+
+/** Resolve `on_ring` into an absolute place_y. Nodes without it are unchanged. */
+export function anchorToRing<T extends object>(node: T, tree: ReadonlyArray<object>): T {
+  const n = node as unknown as Node
+  const ringId = n.on_ring
+  if (!ringId || typeof ringId !== 'string') return node
+  const ring = tree.find((x) => (x as Node).id === ringId && (x as Node).op === 'ring_shank') as Node | undefined
+  if (!ring || ring.suppressed) return node
+  return { ...(node as object), place_y: ringOuterRadius(ring) + (Number(n.place_y) || 0) } as T
+}

@@ -50,7 +50,9 @@ import type { FeatureRendererHandle, ViewName } from './FeatureRenderer'
 import { ZlPanel, ZlIconButton, FeatureTreePanel, ToolPalette, PlacementSection } from './zlatnik/ZlPanels'
 import { opLabel, fieldLabel, optionLabel, opHint } from '../lib/zlatnik/cs'
 import type { ToolDef } from '../lib/zlatnik/tools'
-import { Check, Undo2, Redo2, HelpCircle, Focus } from 'lucide-react'
+import { metalVolume, metalWeight, formatGrams, METAL_SHORT, bodyToGeometry, isGemBody } from '../lib/zlatnik/meshInfo'
+import { exportParts, downloadBlob, sanitizeFilename } from '../lib/exporters.js'
+import { Check, Undo2, Redo2, HelpCircle, Focus, FileDown, Scale } from 'lucide-react'
 import {
   runFeatures, prewarmOcct, newFeatureId,
   requestFaceOutline,
@@ -6205,6 +6207,35 @@ export default function FeatureView({
 
   const setView = useCallback((v: ViewName) => rendererRef.current?.setView(v), [])
 
+  // Metal weight (3DESIGN "Informace"): gemstone bodies excluded.
+  const metalInfo = useMemo(() => {
+    const bodies = meshes.map((m) => m?.mesh).filter(Boolean)
+    const vol = metalVolume(bodies)
+    return { vol, grams: metalWeight(vol, metal), hasGems: bodies.some(isGemBody) }
+  }, [meshes, metal])
+
+  const projectName = useWorkspace((s) => s.project?.name) as string | undefined
+  const [exportOpen, setExportOpen] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
+  const exportRef = useRef<HTMLDivElement | null>(null)
+  useClickOutside(exportRef, () => setExportOpen(false), exportOpen)
+  const doExport = useCallback(async (format: string, metalOnly: boolean) => {
+    setExportOpen(false)
+    setExportError(null)
+    try {
+      const bodies = meshes.map((m) => m?.mesh).filter((b) => b && (!metalOnly || !isGemBody(b)))
+      const parts = bodies.map((b, i) => ({ id: `body-${i}`, geom: bodyToGeometry(b) })).filter((p) => p.geom)
+      if (!parts.length) { setExportError('Není co exportovat — model je prázdný.'); return }
+      const suffix = metalOnly ? `-${(METAL_SHORT[metal] || metal).replace(/\s+/g, '')}` : ''
+      const baseName = sanitizeFilename(`${projectName || fileName}${suffix}`)
+      const { blob, filename } = await exportParts(parts as never, format, { baseName })
+      downloadBlob(blob, filename)
+      for (const p of parts) p.geom?.dispose?.()
+    } catch (err) {
+      setExportError((err as Error)?.message || 'Export se nezdařil')
+    }
+  }, [meshes, metal, fileName, projectName])
+
   // ---- Derived UI state ----
   const sketchFiles = useMemo(() => {
     return (files || []).filter((f) => {
@@ -6288,10 +6319,10 @@ export default function FeatureView({
   return (
     <div className="absolute inset-0 flex flex-col bg-ink-950 text-ink-100" data-testid="zl-workspace">
       {/* Toolbar — catalog popover, metal, standard views, pick modes. */}
-      <div className="border-b border-ink-950 bg-gradient-to-b from-ink-700 to-ink-850 px-2 h-11 flex items-center gap-2 overflow-x-auto scrollbar-thin">
+      <div className="relative z-30 border-b border-ink-950 bg-gradient-to-b from-ink-700 to-ink-850 px-2 h-11 flex items-center gap-2 min-w-0">
         <AddFeaturePopover onPick={(op) => addFeature(op)} />
         <span className="w-px h-5 bg-ink-600 flex-shrink-0" aria-hidden="true" />
-        <span className="text-xs text-ink-100 font-medium truncate max-w-[160px] flex-shrink-0" title={fileName}>{fileName}</span>
+        <span className="hidden xl:inline text-xs text-ink-100 font-medium truncate max-w-[160px] flex-shrink-0" title={fileName}>{fileName}</span>
         <span className="w-px h-5 bg-ink-600 flex-shrink-0" aria-hidden="true" />
         <label className="flex items-center gap-1.5 text-[11px] text-ink-200 flex-shrink-0">
           Kov
@@ -6327,6 +6358,44 @@ export default function FeatureView({
           >
             <Focus size={13} aria-hidden="true" />
           </button>
+        </div>
+        <span className="w-px h-5 bg-ink-600 flex-shrink-0" aria-hidden="true" />
+        <div className="relative flex-shrink-0" ref={exportRef}>
+          <button
+            type="button"
+            onClick={() => setExportOpen((v) => !v)}
+            aria-haspopup="menu"
+            aria-expanded={exportOpen}
+            data-testid="zl-export"
+            className="h-7 inline-flex items-center gap-1.5 px-2.5 rounded-md text-[12px] font-semibold bg-kerf-300 text-ink-950 hover:bg-kerf-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kerf-300/60"
+          >
+            <FileDown size={13} aria-hidden="true" />
+            Export
+            <ChevronDown size={12} aria-hidden="true" />
+          </button>
+          {exportOpen && (
+            <div role="menu" className="absolute left-0 top-full mt-1 z-50 w-64 rounded-lg border border-ink-600 bg-ink-850 shadow-2xl shadow-black/60 py-1 text-[12.5px]">
+              {[
+                { f: 'stl-binary', metalOnly: true, label: 'STL — jen kov', sub: 'pro odlití / tisk vosku' },
+                { f: 'stl-binary', metalOnly: false, label: 'STL — vše (kov + kameny)', sub: '' },
+                { f: '3mf', metalOnly: true, label: '3MF — jen kov', sub: 'pro slicery tiskáren' },
+                { f: 'obj', metalOnly: false, label: 'OBJ — vše', sub: 'pro render / jiné CAD' },
+                { f: 'glb', metalOnly: false, label: 'GLB — vše', sub: 'náhled na web' },
+              ].map((o) => (
+                <button
+                  key={o.label}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => { void doExport(o.f, o.metalOnly) }}
+                  data-testid={`zl-export-${o.f}-${o.metalOnly ? 'metal' : 'all'}`}
+                  className="w-full text-left px-3 py-1.5 hover:bg-ink-700 focus-visible:outline-none focus-visible:bg-ink-700"
+                >
+                  <div className="text-ink-50">{o.label}</div>
+                  {o.sub && <div className="text-[11px] text-ink-300">{o.sub}</div>}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div className="flex-1" />
         <div className="flex items-center gap-1 flex-shrink-0">
@@ -6538,6 +6607,15 @@ export default function FeatureView({
             )}
           </span>
         )}
+        {metalInfo.vol > 0 && (
+          <span className="inline-flex items-center gap-1.5 text-kerf-100" data-testid="zl-weight" title={`Objem kovu ${metalInfo.vol.toFixed(1)} mm³ · hustota podle slitiny`}>
+            <Scale size={11} aria-hidden="true" />
+            <span>{METAL_SHORT[metal] || metal}:</span>
+            <b className="text-kerf-200">{formatGrams(metalInfo.grams)}</b>
+            <span className="text-ink-400">({metalInfo.vol.toLocaleString('cs-CZ', { maximumFractionDigits: 1 })} mm³)</span>
+          </span>
+        )}
+        {exportError && <span className="text-red-300 truncate" title={exportError}>{exportError}</span>}
         <div className="flex-1" />
         {selCount > 0 && (
           <>
@@ -7462,7 +7540,7 @@ function ModeBtn({ active, onClick, icon: Icon, label, title }) {
           : 'border-transparent bg-transparent text-ink-300 hover:bg-ink-800 hover:text-ink-100'}`}
     >
       <Icon size={12} aria-hidden="true" />
-      <span>{label}</span>
+      <span className="hidden xl:inline">{label}</span>
     </button>
   )
 }

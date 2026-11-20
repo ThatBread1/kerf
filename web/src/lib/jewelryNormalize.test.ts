@@ -55,3 +55,29 @@ describe('normalizeJewelryNode', () => {
     expect(normalizeJewelryNode(node)).toBe(node)
   })
 })
+
+import { anchorToRing, ringOuterRadius } from './jewelryNormalize'
+
+describe('anchorToRing', () => {
+  const ring = { id: 'r', op: 'ring_shank', ring_size: 54, system: 'eu', thickness: 1.6, band_width: 2.5 }
+  it('measures place_y from the top of the referenced shank', () => {
+    const head = { id: 'h', op: 'jewelry_prong_head', on_ring: 'r', place_y: -0.4 }
+    const out = anchorToRing(head, [ring, head]) as unknown as Record<string, number>
+    expect(out.place_y).toBeCloseTo(ringOuterRadius(ring) - 0.4, 6)
+    expect(ringOuterRadius(ring)).toBeCloseTo(54 / Math.PI / 2 + 1.6, 4)
+  })
+  it('follows a ring size change', () => {
+    const head = { id: 'h', op: 'jewelry_prong_head', on_ring: 'r', place_y: 0 }
+    const big = { ...ring, ring_size: 62 }
+    const a = anchorToRing(head, [ring, head]) as unknown as Record<string, number>
+    const b = anchorToRing(head, [big, head]) as unknown as Record<string, number>
+    expect(b.place_y - a.place_y).toBeCloseTo((62 - 54) / Math.PI / 2, 4)
+  })
+  it('ignores missing or suppressed rings', () => {
+    const head = { id: 'h', op: 'gemstone', on_ring: 'nope', place_y: 1 }
+    expect(anchorToRing(head, [ring, head])).toBe(head)
+    const off = { ...ring, suppressed: true }
+    const h2 = { id: 'h', op: 'gemstone', on_ring: 'r', place_y: 1 }
+    expect(anchorToRing(h2, [off, h2])).toBe(h2)
+  })
+})

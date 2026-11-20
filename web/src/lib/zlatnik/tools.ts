@@ -17,7 +17,7 @@ import {
   CircleDashed, Scissors, Combine, Repeat, Rows2, FlipHorizontal2, Squircle, Layers,
   Ribbon, Heart, Shapes,
 } from 'lucide-react'
-import { normalizeJewelryNode } from '../jewelryNormalize'
+import { ringOuterRadius } from '../jewelryNormalize'
 
 export type ToolNode = Record<string, unknown> & { id: string; op: string }
 
@@ -54,21 +54,19 @@ export const RING_DEFAULTS = {
   shoulder_style: 'plain',
 }
 
-/** Outer radius (mm) of the last ring shank in the tree, or null. */
-export function ringTopRadius(tree: ToolNode[]): number | null {
+/** The last active ring shank in the tree, or null. */
+export function lastRing(tree: ToolNode[]): ToolNode | null {
   for (let i = tree.length - 1; i >= 0; i--) {
     const n = tree[i]
-    if (n.op !== 'ring_shank' || n.suppressed) continue
-    const norm = normalizeJewelryNode(n)
-    const od = Number(norm.outer_diameter_mm)
-    if (Number.isFinite(od) && od > 0) {
-      const py = Number(n.place_y) || 0
-      return od / 2 + py
-    }
-    const id = Number(norm.inner_diameter_mm) || 17.32
-    return id / 2 + (Number(norm.thickness_mm) || 1.8)
+    if (n.op === 'ring_shank' && !n.suppressed) return n
   }
   return null
+}
+
+/** Outer radius (mm) of the last ring shank in the tree, or null. */
+export function ringTopRadius(tree: ToolNode[]): number | null {
+  const ring = lastRing(tree)
+  return ring ? ringOuterRadius(ring) : null
 }
 
 /** Last node that produces a solid body (for modify-type tools). */
@@ -82,10 +80,13 @@ function lastBodyId(tree: ToolNode[]): string {
 // How far a setting's base is sunk into the shank so the two fuse cleanly.
 const SINK_MM = 0.4
 
+/** Stand `node` on top of the last ring shank: +Z of the part points out of
+ *  the shank (rot_x −90°) and place_y is stored relative to the shank's top
+ *  via `on_ring`, so it follows ring size / thickness changes. */
 function onRing(ctx: ToolContext, node: ToolNode, liftMm = 0): ToolNode {
-  const r = ringTopRadius(ctx.tree)
-  if (r == null) return node
-  return { ...node, rot_x: -90, place_y: +(r - SINK_MM + liftMm).toFixed(3) }
+  const ring = lastRing(ctx.tree)
+  if (!ring) return node
+  return { ...node, on_ring: ring.id, rot_x: -90, place_y: +(liftMm - SINK_MM).toFixed(3) }
 }
 
 const single = (op: string, defaults: Record<string, unknown> = {}, placeOnRing = false, lift = 0) =>

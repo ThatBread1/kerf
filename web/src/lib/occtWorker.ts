@@ -153,7 +153,7 @@ import {
   nameOpOutput,
 } from './faceNaming.js'
 import { resolveFaceRef } from './faceRef.js'
-import { normalizeJewelryNode } from './jewelryNormalize.js'
+import { normalizeJewelryNode, anchorToRing } from './jewelryNormalize.js'
 
 // The opencascade.js 2.x package ships an emscripten factory
 // (`opencascade.full.js`) plus the matching `.wasm` blob. Vite bundles the JS
@@ -6970,7 +6970,7 @@ function evaluateTree(oc: OcInstance, tree: FeatureNode[], sketches: SketchMap):
     if (current && currentFaceNamer) {
       try { _faceNames = currentFaceNamer(oc, current) || {} } catch { /* ignore */ }
     }
-    const node = { ...normalizeJewelryNode(raw), _sketches: sketches, _faceNames }
+    const node = { ...normalizeJewelryNode(anchorToRing(raw, tree)), _sketches: sketches, _faceNames }
     let next
     try {
       switch (node.op) {
@@ -7760,7 +7760,7 @@ async function evaluateToFinalShape(
     if (current && currentFaceNamer) {
       try { _faceNames = currentFaceNamer(oc, current) || {} } catch { /* ignore */ }
     }
-    const node = { ...normalizeJewelryNode(raw), _sketches: sketches, _faceNames }
+    const node = { ...normalizeJewelryNode(anchorToRing(raw, tree)), _sketches: sketches, _faceNames }
     let next
     try {
       switch (node.op) {

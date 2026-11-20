@@ -265,6 +265,19 @@ export function PlacementSection({
           Vynulovat
         </button>
       </div>
+      {typeof feature.on_ring === 'string' && feature.on_ring && (
+        <div className="mx-2 mt-2 px-2 py-1.5 rounded bg-kerf-300/10 border border-kerf-300/30 text-[10.5px] leading-snug text-kerf-100 flex items-start gap-2">
+          <span className="flex-1">Ukotveno na obroučce — <b>Posun Y</b> se měří od jejího vrcholu a díl se posune s ní při změně velikosti.</span>
+          <button
+            type="button"
+            onClick={() => onPatch({ on_ring: '' })}
+            className="flex-shrink-0 underline text-kerf-200 hover:text-white"
+            title="Zrušit ukotvení (Posun Y bude měřen od počátku)"
+          >
+            Odpojit
+          </button>
+        </div>
+      )}
       <div className="grid grid-cols-3 gap-1.5 p-2">
         {PLACE_FIELDS.map((f) => (
           <label key={f.key} className="flex flex-col gap-0.5">
