@@ -11,6 +11,8 @@ rem  Data (projekty) se ukládají do %USERPROFILE%\.kerf\kerf.db
 rem ===========================================================================
 chcp 65001 >nul
 setlocal EnableExtensions
+rem Zastupce "Kerf zlatník" na plose (vytvori ho Windows, aby vzdy fungoval).
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$d=[Environment]::GetFolderPath('Desktop'); $s=(New-Object -ComObject WScript.Shell).CreateShortcut($d+'\Kerf zlatn'+[char]0x00ED+'k.lnk'); $s.TargetPath='%~f0'; $s.WorkingDirectory='%~dp0'; $s.IconLocation='%~dp0kerf-zlatnik.ico'; $s.WindowStyle=7; $s.Description='Kerf - modelovani sperku'; $s.Save()" >nul 2>nul
 cd /d "%~dp0\..\.."
 set "ROOT=%cd%"
 set "PY=%ROOT%\.venv\Scripts\python.exe"
