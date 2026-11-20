@@ -625,6 +625,40 @@ const FEATURE_KINDS = [
       { key: 'show_combs',         kind: 'boolean', label: 'Show combs' },
     ],
   },
+  // ── Solids (3Design "Pevná tělesa") ──────────────────────────────────────
+  {
+    op: 'primitive',
+    label: 'Solid',
+    icon: Cuboid,
+    defaults: {
+      shape: 'sphere',
+      radius_mm: 2,
+      minor_radius_mm: 1,
+      height_mm: 4,
+      top_radius_mm: 0,
+      width_mm: 4,
+      depth_mm: 4,
+      wall_mm: 0.8,
+    },
+    caption: 'Basic solid built at the origin along +Z. Use Placement to move, rotate or scale it.',
+    fields: [
+      { key: 'shape', kind: 'select', label: 'Shape', options: [
+        { value: 'sphere',   label: 'Sphere' },
+        { value: 'torus',    label: 'Torus' },
+        { value: 'cylinder', label: 'Cylinder' },
+        { value: 'cone',     label: 'Cone' },
+        { value: 'box',      label: 'Box' },
+        { value: 'tube',     label: 'Tube' },
+      ] },
+      { key: 'radius_mm',       kind: 'number', label: 'Radius (mm)',          min: 0.01, step: 0.1, showWhen: (f) => ['sphere', 'torus', 'cylinder', 'cone', 'tube'].includes(f.shape || 'sphere') },
+      { key: 'minor_radius_mm', kind: 'number', label: 'Tube radius (mm)',     min: 0.01, step: 0.1, showWhen: (f) => ['torus'].includes(f.shape || 'sphere') },
+      { key: 'top_radius_mm',   kind: 'number', label: 'Top radius (mm)',      min: 0,    step: 0.1, showWhen: (f) => ['cone'].includes(f.shape || 'sphere') },
+      { key: 'wall_mm',         kind: 'number', label: 'Wall (mm)',            min: 0.01, step: 0.05, showWhen: (f) => ['tube'].includes(f.shape || 'sphere') },
+      { key: 'width_mm',        kind: 'number', label: 'Width (mm)',           min: 0.01, step: 0.1, showWhen: (f) => ['box'].includes(f.shape || 'sphere') },
+      { key: 'depth_mm',        kind: 'number', label: 'Depth (mm)',           min: 0.01, step: 0.1, showWhen: (f) => ['box'].includes(f.shape || 'sphere') },
+      { key: 'height_mm',       kind: 'number', label: 'Height (mm)',          min: 0.01, step: 0.1, showWhen: (f) => ['cylinder', 'cone', 'box', 'tube'].includes(f.shape || 'sphere') },
+    ],
+  },
   // ── Jewelry ──────────────────────────────────────────────────────────────
   {
     op: 'gemstone',
@@ -5542,6 +5576,7 @@ const KIND_BY_OP = Object.fromEntries(FEATURE_KINDS.map((k) => [k.op, k]))
 export { FEATURE_KINDS, FEATURE_CATEGORIES }
 
 const FEATURE_CATEGORIES = [
+  { id: 'solids',   label: 'Solids',        ops: ['primitive'] },
   { id: 'sketch',   label: 'Sketch-based',  ops: ['pad', 'boss_with_draft', 'pocket', 'cut_from_sketch', 'revolve', 'hole', 'hole_pattern', 'rib', 'helix'] },
   { id: 'modify',   label: 'Modify',        ops: [
     'fillet', 'chamfer', 'shell', 'push_pull', 'variable_radius_fillet',

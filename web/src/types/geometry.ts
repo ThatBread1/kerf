@@ -156,6 +156,10 @@ export interface Mesh {
   edgeMap: EdgeMap
   /** Attached at mesh-push time, not part of breptToMesh's own return value. */
   faceNames: FaceNameMap
+  /** Id / op of the feature node that last produced this body (for per-body
+   *  materials — metal vs gemstone). Set by evaluateTree at push time. */
+  sourceNode?: string | null
+  sourceOp?: string | null
 }
 
 // ---------------------------------------------------------------------------

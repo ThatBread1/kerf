@@ -4362,7 +4362,7 @@ function opJewelryPave(oc: OcInstance, _prev: OcHandle, node: OpNode, _sketches:
       track(tracker, new oc.gp_Pnt_3(so[0], so[1], so[2])),
       track(tracker, new oc.gp_Dir_4(nX, nY, nZ)),
     ))
-    const s0 = track(tracker, new oc.BRepPrimAPI_MakeSphere_3(ax0, markerR > 0 ? markerR : 0.5))
+    const s0 = track(tracker, new oc.BRepPrimAPI_MakeSphere_9(ax0, markerR > 0 ? markerR : 0.5))
     s0.Build()
     return s0.Shape()
   }
@@ -4397,7 +4397,7 @@ function opJewelryPave(oc: OcInstance, _prev: OcHandle, node: OpNode, _sketches:
       track(tracker, new oc.gp_Pnt_3(wx, wy, wz)),
       track(tracker, new oc.gp_Dir_4(nX, nY, nZ)),
     ))
-    const sphere = track(tracker, new oc.BRepPrimAPI_MakeSphere_3(ax, markerR))
+    const sphere = track(tracker, new oc.BRepPrimAPI_MakeSphere_9(ax, markerR))
     sphere.Build()
     if (sphere.IsDone()) builder.Add(compBuilder, sphere.Shape())
   }
@@ -5395,7 +5395,7 @@ function opDecorativeApply(oc: OcInstance, _prev: OcHandle, node: OpNode, _sketc
       track(tracker, new oc.gp_Pnt_3(0, 0, 0)),
       track(tracker, new oc.gp_Dir_4(0, 0, 1)),
     ))
-    const s = track(tracker, new oc.BRepPrimAPI_MakeSphere_3(ax, 0.2))
+    const s = track(tracker, new oc.BRepPrimAPI_MakeSphere_9(ax, 0.2))
     s.Build()
     return _jewelryTransform(oc, s.IsDone() ? s.Shape() : _makeBox(oc, -0.2, -0.2, -0.2, 0.4, 0.4, 0.4, tracker),
       node.position, node.orientation_deg, tracker)
@@ -5418,7 +5418,7 @@ function opDecorativeApply(oc: OcInstance, _prev: OcHandle, node: OpNode, _sketc
         track(tracker, new oc.gp_Pnt_3(i * pitchMm, 0, 0)),
         track(tracker, new oc.gp_Dir_4(0, 0, 1)),
       ))
-      const sphere = track(tracker, new oc.BRepPrimAPI_MakeSphere_3(ax, beadR > 0 ? beadR : 0.25))
+      const sphere = track(tracker, new oc.BRepPrimAPI_MakeSphere_9(ax, beadR > 0 ? beadR : 0.25))
       sphere.Build()
       if (sphere.IsDone()) bldBuilder.Add(compBuilder, sphere.Shape())
     }
@@ -5713,7 +5713,7 @@ function opJewelryProngVariant(oc: OcInstance, _prev: OcHandle, node: OpNode, _s
             track(tracker, new oc.gp_Pnt_3(cx, cy, prongH * 1.5 + wireD)),
             track(tracker, new oc.gp_Dir_4(0, 0, 1)),
           ))
-          const hook = track(tracker, new oc.BRepPrimAPI_MakeSphere_3(hookAx, hookD / 2))
+          const hook = track(tracker, new oc.BRepPrimAPI_MakeSphere_9(hookAx, hookD / 2))
           hook.Build()
           if (hook.IsDone()) head = _jewelryFuse(oc, head, hook.Shape(), tracker)
         } catch { /* skip hook */ }
@@ -5772,7 +5772,7 @@ function opJewelryHeadGallery(oc: OcInstance, _prev: OcHandle, node: OpNode, _sk
             track(tracker, new oc.gp_Pnt_3(sx, sy, -(galH) - scR * 0.5)),
             track(tracker, new oc.gp_Dir_4(0, 0, 1)),
           ))
-          const scoop = track(tracker, new oc.BRepPrimAPI_MakeSphere_3(scAx, scR))
+          const scoop = track(tracker, new oc.BRepPrimAPI_MakeSphere_9(scAx, scR))
           scoop.Build()
           if (scoop.IsDone()) {
             try { gallery = _jewelryCut(oc, gallery, scoop.Shape(), tracker) } catch { /* skip */ }
@@ -6075,7 +6075,7 @@ function opJewelryBombeCluster(oc: OcInstance, _prev: OcHandle, node: OpNode, _s
           track(tracker, new oc.gp_Pnt_3(px, py, pz)),
           track(tracker, new oc.gp_Dir_4(0, 0, 1)),
         ))
-        const marker = track(tracker, new oc.BRepPrimAPI_MakeSphere_3(mAx, markerR))
+        const marker = track(tracker, new oc.BRepPrimAPI_MakeSphere_9(mAx, markerR))
         marker.Build()
         if (marker.IsDone()) {
           try { dome = _jewelryFuse(oc, dome, marker.Shape(), tracker) } catch { /* skip */ }
@@ -6139,7 +6139,7 @@ function opJewelryPatternedBezel(oc: OcInstance, _prev: OcHandle, node: OpNode, 
             track(tracker, new oc.gp_Pnt_3(sx, sy, scZ)),
             track(tracker, new oc.gp_Dir_4(0, 0, 1)),
           ))
-          const scoop = track(tracker, new oc.BRepPrimAPI_MakeSphere_3(scAx, scR))
+          const scoop = track(tracker, new oc.BRepPrimAPI_MakeSphere_9(scAx, scR))
           scoop.Build()
           if (scoop.IsDone()) {
             try { bezel = _jewelryCut(oc, bezel, scoop.Shape(), tracker) } catch { /* skip */ }
@@ -6753,6 +6753,103 @@ function opHarnessTubeSweep(oc: OcInstance, _prev: OcHandle, node: OpNode, _sk: 
 // downstream ops (pocket/fillet/chamfer/shell/hole) operate on the most
 // recent root only — multi-body trees aren't a v1 goal.
 
+
+// ---------------------------------------------------------------------------
+// Placement (3Design "Poloha"): every node may carry place_x/y/z (mm),
+// rot_x/y/z (degrees, applied X then Y then Z about the origin) and a uniform
+// scale. Applied to the node's resulting shape after the op runs, so a gem,
+// a head or a whole sub-assembly can be positioned on the ring.
+// ---------------------------------------------------------------------------
+const PLACEMENT_KEYS = ['place_x', 'place_y', 'place_z', 'rot_x', 'rot_y', 'rot_z', 'scale'] as const
+
+export function hasPlacement(node: Record<string, unknown>): boolean {
+  for (const k of PLACEMENT_KEYS) {
+    const v = Number(node?.[k])
+    if (!Number.isFinite(v)) continue
+    if (k === 'scale' ? (v > 0 && Math.abs(v - 1) > 1e-9) : Math.abs(v) > 1e-9) return true
+  }
+  return false
+}
+
+function applyPlacement(oc: OcInstance, shape: OcHandle, node: OpNode, tracker: OcHandle[]): OcHandle {
+  if (!shape || !hasPlacement(node as Record<string, unknown>)) return shape
+  const num = (k: string) => { const v = Number((node as Record<string, unknown>)[k]); return Number.isFinite(v) ? v : 0 }
+  let out = shape
+  const sc = Number((node as Record<string, unknown>).scale)
+  if (Number.isFinite(sc) && sc > 0 && Math.abs(sc - 1) > 1e-9) {
+    const trsf = track(tracker, new oc.gp_Trsf_1())
+    const o = track(tracker, new oc.gp_Pnt_3(0, 0, 0))
+    trsf.SetScale(o, sc)
+    const xf = track(tracker, new oc.BRepBuilderAPI_Transform_2(out, trsf, true))
+    out = xf.Shape()
+  }
+  const D = Math.PI / 180
+  if (num('rot_x')) out = rotateShape(oc, out, [0, 0, 0], [1, 0, 0], num('rot_x') * D, tracker)
+  if (num('rot_y')) out = rotateShape(oc, out, [0, 0, 0], [0, 1, 0], num('rot_y') * D, tracker)
+  if (num('rot_z')) out = rotateShape(oc, out, [0, 0, 0], [0, 0, 1], num('rot_z') * D, tracker)
+  if (num('place_x') || num('place_y') || num('place_z')) {
+    out = translateShape(oc, out, [num('place_x'), num('place_y'), num('place_z')], tracker)
+  }
+  return out
+}
+
+// ---------------------------------------------------------------------------
+// primitive — 3Design "Pevná tělesa": sphere, torus, cylinder, cone, box,
+// tube. Built centred on the origin along +Z (box/cylinder/cone/tube start at
+// z=0); use the placement fields to position them.
+// ---------------------------------------------------------------------------
+function opPrimitive(oc: OcInstance, node: OpNode): OcHandle {
+  const kind = String(node.shape || 'sphere')
+  const pos = (k: string, d: number) => { const v = Number((node as Record<string, unknown>)[k]); return Number.isFinite(v) && v > 0 ? v : d }
+  const o = new oc.gp_Pnt_3(0, 0, 0)
+  const z = new oc.gp_Dir_4(0, 0, 1)
+  const ax = new oc.gp_Ax2_3(o, z)
+  try {
+    let mk: OcHandle
+    switch (kind) {
+      case 'sphere': mk = new oc.BRepPrimAPI_MakeSphere_9(ax, pos('radius_mm', 2)); break
+      case 'torus': {
+        const R = pos('radius_mm', 8), r = pos('minor_radius_mm', 1)
+        if (r >= R) throw new Error('primitive torus: tube radius must be smaller than the main radius')
+        mk = new oc.BRepPrimAPI_MakeTorus_5(ax, R, r); break
+      }
+      case 'cylinder': mk = new oc.BRepPrimAPI_MakeCylinder_3(ax, pos('radius_mm', 2), pos('height_mm', 4)); break
+      case 'cone': {
+        const r2 = Number(node.top_radius_mm)
+        mk = new oc.BRepPrimAPI_MakeCone_3(ax, pos('radius_mm', 2), Number.isFinite(r2) && r2 >= 0 ? r2 : 0, pos('height_mm', 4)); break
+      }
+      case 'box': {
+        const w = pos('width_mm', 4), d = pos('depth_mm', 4), h = pos('height_mm', 4)
+        const corner = new oc.gp_Pnt_3(-w / 2, -d / 2, 0)
+        const bax = new oc.gp_Ax2_3(corner, z)
+        mk = new oc.BRepPrimAPI_MakeBox_5(bax, w, d, h)
+        corner.delete(); bax.delete(); break
+      }
+      case 'tube': {
+        const R = pos('radius_mm', 3), wall = pos('wall_mm', 0.8), h = pos('height_mm', 4)
+        if (wall >= R) throw new Error('primitive tube: wall must be thinner than the radius')
+        const outer = new oc.BRepPrimAPI_MakeCylinder_3(ax, R, h)
+        const inner = new oc.BRepPrimAPI_MakeCylinder_3(ax, R - wall, h)
+        const range = new oc.Message_ProgressRange_1()
+        const cut = new oc.BRepAlgoAPI_Cut_3(outer.Shape(), inner.Shape(), range)
+        cut.Build(range)
+        if (!cut.IsDone()) throw new Error('primitive tube: boolean cut failed')
+        const res = cut.Shape()
+        outer.delete(); inner.delete(); range.delete()
+        return res
+      }
+      default: throw new Error(`primitive: unknown shape '${kind}'`)
+    }
+    if (typeof mk.Build === 'function') mk.Build()
+    if (typeof mk.IsDone === 'function' && !mk.IsDone()) throw new Error(`primitive ${kind}: build failed`)
+    const res = mk.Shape()
+    try { mk.delete() } catch { /* */ }
+    return res
+  } finally {
+    try { ax.delete(); z.delete(); o.delete() } catch { /* */ }
+  }
+}
+
 function evaluateTree(oc: OcInstance, tree: FeatureNode[], sketches: SketchMap): Mesh[] {
   if (!Array.isArray(tree)) tree = []
   const tracker = makeTracker()
@@ -6774,13 +6871,17 @@ function evaluateTree(oc: OcInstance, tree: FeatureNode[], sketches: SketchMap):
   const bodyFaceNamers = {}
 
   // Helper: push the current shape as a mesh entry, including faceNames.
+  // Which feature node produced `current` — tagged onto each pushed body so
+  // the renderer can pick a metal or gemstone material per body.
+  let currentNodeId: string | null = null
+  let currentNodeOp: string | null = null
   function pushCurrentMesh(bodyId) {
     const mesh = breptToMesh(oc, current)
     let faceNames = {}
     try {
       if (currentFaceNamer) faceNames = currentFaceNamer(oc, current)
     } catch { /* silently omit on failure */ }
-    meshes.push({ id: bodyId, ...mesh, faceNames })
+    meshes.push({ id: bodyId, ...mesh, faceNames, sourceNode: currentNodeId, sourceOp: currentNodeOp })
   }
 
   // Inject sketch lookup + current face-names into hole/(future) ops via node decoration.
@@ -7129,6 +7230,16 @@ function evaluateTree(oc: OcInstance, tree: FeatureNode[], sketches: SketchMap):
           // dκ/ds oracle grades G3 from the sampled tensors. Leaves shape alone.
           opOcctG3Audit(oc, current, node, sketches, tracker, bodyMap)
           next = current
+          break
+        }
+        case 'primitive': {
+          if (current) {
+            pushCurrentMesh(`body-${meshes.length}`)
+            cleanupShape(oc, current)
+            current = null
+          }
+          next = opPrimitive(oc, node)
+          currentFaceNamer = null
           break
         }
         // ── Jewelry ops (T-20 → T-24) ───────────────────────────────────────
@@ -7497,10 +7608,20 @@ function evaluateTree(oc: OcInstance, tree: FeatureNode[], sketches: SketchMap):
       e.partial = current
       throw e
     }
+    if (next && hasPlacement(node as Record<string, unknown>)) {
+      try {
+        next = applyPlacement(oc, next, node as OpNode, tracker)
+      } catch (err) {
+        const e: OpError = new Error(`feature '${node.id || node.op}': placement failed: ${(err as Error)?.message || err}`)
+        e.partial = current
+        throw e
+      }
+    }
     // Replace current with next; delete the now-stale previous shape.
     if (current && current !== next) cleanupShape(oc, current)
     current = next
     currentTrack = next
+    if (next) { currentNodeId = node.id || null; currentNodeOp = node.op || null }
     // Populate bodyMap so later ops (boolean, to_solid-with-target) can look
     // up this node's result by id. Stored as alias — never delete here.
     if (node.id && next) {
@@ -8018,7 +8139,16 @@ async function evaluateToFinalShape(
           next = opHarnessTubeSweep(oc, null, node, sketches, tracker)
           currentFaceNamer = null
           break
+        case 'primitive':
+          if (current) cleanupShape(oc, current)
+          current = null
+          next = opPrimitive(oc, node as OpNode)
+          currentFaceNamer = null
+          break
         default: throw new Error(`unknown feature op '${(node as OpNode).op}'`)
+      }
+      if (next && hasPlacement(node as Record<string, unknown>)) {
+        next = applyPlacement(oc, next, node as OpNode, tracker)
       }
     } catch {
       // Best-effort: bail with whatever we have.
