@@ -52,7 +52,7 @@
     "lucide-react": "^0.468.0",
     "mathjs": "^15.2.0",
     "occt-import-js": "^0.0.23",
-    "opencascade.js": "^1.1.1",
+    "opencascade.js": "2.0.0-beta.b5ff984",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-markdown": "^10.1.0",

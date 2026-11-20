@@ -31,12 +31,18 @@
 // recognized-but-unresolved module name and rejects it as an "invalid
 // augmentation" rather than accepting a fresh ambient declaration). Narrowed to
 // the one call shape this file actually uses immediately below instead.
-import { createHash as _createHash } from 'crypto'
+import * as nodeCrypto from 'crypto'
 import type { FaceDescriptor, FaceNameMap, ModifiedMap, Vec3 } from '@/types'
 
 /** The one createHash(...).update(...).digest(...) shape this file calls — see the import above. */
 type CryptoHash = { update(data: string): { digest(encoding: 'hex'): string } }
-const createHash = _createHash as unknown as (algorithm: string) => CryptoHash
+// Resolved lazily: in the browser build Vite replaces 'crypto' with a stub
+// whose property access throws. Reading `createHash` at module-evaluation
+// time crashed the whole feature view ("Module crypto has been externalized
+// for browser compatibility"); reading it inside sha256hex8's try block lets
+// the browser fall through to the djb2 fallback instead.
+const createHash = (algorithm: string): CryptoHash =>
+  (nodeCrypto as unknown as { createHash: (a: string) => CryptoHash }).createHash(algorithm)
 
 // ---------------------------------------------------------------------------
 // SHA-256 helper — works in both Node (crypto module) and browser

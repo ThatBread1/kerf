@@ -562,7 +562,11 @@ export function breptToMesh(oc: OcInstance, shape: OcHandle | null | undefined):
   }
   // Force triangulation.
   try {
-    const mesh = new oc.BRepMesh_IncMesh_2(shape, MESH_LINEAR_DEFLECTION, false, MESH_ANGULAR_DEFLECTION, false)
+    // opencascade.js 2.x binds the mesher as BRepMesh_IncrementalMesh_*; the
+    // older BRepMesh_IncMesh_* names don't exist there, which left every
+    // shape untriangulated (0 vertices in the viewport).
+    const Mesher = oc.BRepMesh_IncrementalMesh_2 || oc.BRepMesh_IncMesh_2
+    const mesh = new Mesher(shape, MESH_LINEAR_DEFLECTION, false, MESH_ANGULAR_DEFLECTION, false)
     mesh.Perform_1?.() // some bindings auto-perform on construct
     if (typeof mesh.delete === 'function') mesh.delete()
   } catch {

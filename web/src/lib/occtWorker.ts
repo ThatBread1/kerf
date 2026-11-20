@@ -154,12 +154,17 @@ import {
 } from './faceNaming.js'
 import { resolveFaceRef } from './faceRef.js'
 
-// The opencascade.js package ships a JS shim (`opencascade.wasm.js`) plus
-// the matching `.wasm` blob. Vite bundles the JS but won't auto-resolve
-// the .wasm because it's not a JS module — `?url` returns the static asset
-// URL instead, and we hand that to OCCT's `locateFile` hook so the
-// emscripten loader fetches the right file at runtime.
-import wasmUrl from 'opencascade.js/dist/opencascade.wasm.wasm?url'
+// The opencascade.js 2.x package ships an emscripten factory
+// (`opencascade.full.js`) plus the matching `.wasm` blob. Vite bundles the JS
+// but won't auto-resolve the .wasm because it's not a JS module — `?url`
+// returns the static asset URL instead, and we hand that to the factory's
+// `locateFile` hook so the loader fetches the right file at runtime.
+//
+// The worker code targets the opencascade.js 2.x API (OCCT 7.6:
+// Message_ProgressRange arguments, 3-argument BRep_Tool.Triangulation, …).
+// package.json previously pinned ^1.1.1 (OCCT 7.4), where none of those
+// exist, so every feature evaluation in the browser failed.
+import wasmUrl from 'opencascade.js/dist/opencascade.full.wasm?url'
 
 let ocPromise: Promise<OcInstance> | null = null
 
@@ -382,17 +387,52 @@ function _logNurbsPhase4Bindings(oc: OcInstance): void {
   }
 }
 
+// OCCT 7.6 (opencascade.js 2.x) made the Message_ProgressRange argument of
+// Build()/Perform() mandatory. Much of the worker still calls them with no
+// arguments, which embind rejects ("called with 0 arguments, expected 1").
+// Wrap those methods once so a zero-argument call is retried with a default
+// progress range. Embind validates the argument count before running any
+// native code, so the retry is side-effect free.
+function _installProgressRangeDefaults(oc: OcInstance): void {
+  const WRAPPED = '__kerfPrDefault'
+  const methods = ['Build', 'Perform']
+  for (const name of Object.keys(oc)) {
+    const C = (oc as Record<string, unknown>)[name]
+    if (typeof C !== 'function' || !(C as { prototype?: unknown }).prototype) continue
+    const proto = (C as { prototype: Record<string, unknown> }).prototype
+    for (const m of methods) {
+      if (!Object.prototype.hasOwnProperty.call(proto, m)) continue
+      const orig = proto[m] as ((...a: unknown[]) => unknown) & Record<string, unknown>
+      if (typeof orig !== 'function' || orig[WRAPPED]) continue
+      const wrapped = function (this: unknown, ...args: unknown[]) {
+        if (args.length > 0) return orig.apply(this, args)
+        try {
+          return orig.call(this)
+        } catch (err) {
+          const msg = String((err as { message?: string })?.message ?? err)
+          if (!/called with 0 arguments/.test(msg)) throw err
+          const range = new oc.Message_ProgressRange_1()
+          try { return orig.call(this, range) } finally { try { range.delete() } catch { /* */ } }
+        }
+      } as ((...a: unknown[]) => unknown) & Record<string, unknown>
+      wrapped[WRAPPED] = true
+      proto[m] = wrapped
+    }
+  }
+}
+
 // Lazy-init OCCT. Returns a Promise<oc>. The first call kicks off the wasm
 // download + compile; subsequent calls re-use the resolved module.
 function loadOcct(): Promise<OcInstance> {
   if (ocPromise) return ocPromise
   ocPromise = (async () => {
-    const mod = await import('opencascade.js')
-    const init = mod.initOpenCascade || mod.default?.initOpenCascade || mod.default
-    if (typeof init !== 'function') {
-      throw new Error('opencascade.js: initOpenCascade not exported')
+    const mod = await import('opencascade.js/dist/opencascade.full.js')
+    const factory = mod.default || mod
+    if (typeof factory !== 'function') {
+      throw new Error('opencascade.js: emscripten factory not exported')
     }
-    const oc = await init({ locateFile: () => wasmUrl })
+    const oc = await new factory({ locateFile: () => wasmUrl })
+    _installProgressRangeDefaults(oc)
     // v1 probe (T1): three gating classes for the solid-cap path.
     _logNurbsBooleanBindings(oc)
     // Phase 4 full probe (C1-T1 / PB-1): all four capability gates.
@@ -728,7 +768,7 @@ function opRevolve(oc: OcInstance, _prev: OcHandle, node: OpNode, sketches: Sket
   const origin = track(tracker, new oc.gp_Pnt_3(0, 0, 0))
   const dir = track(tracker, new oc.gp_Dir_4(axisDir[0], axisDir[1], axisDir[2]))
   const ax1 = track(tracker, new oc.gp_Ax1_2(origin, dir))
-  const builder = track(tracker, new oc.BRepPrimAPI_MakeRevol_2(face, ax1, angle, true))
+  const builder = track(tracker, new oc.BRepPrimAPI_MakeRevol_1(face, ax1, angle, true))
   builder.Build()
   if (!builder.IsDone()) throw new Error('revolve: build failed')
   return builder.Shape()
@@ -3571,11 +3611,11 @@ function _makeBox(oc: OcInstance, x0: number, y0: number, z0: number, dx: number
     const edge = track(tracker, new oc.BRepBuilderAPI_MakeEdge_3(p0, p1))
     edge.Build()
     if (!edge.IsDone()) throw new Error('jewelry: box edge build failed')
-    wBuilder.Add_1(edge.Shape())
+    wBuilder.Add_1(edge.Edge())
   }
   wBuilder.Build()
   if (!wBuilder.IsDone()) throw new Error('jewelry: box wire build failed')
-  const faceMaker = track(tracker, new oc.BRepBuilderAPI_MakeFace_15(wBuilder.Shape(), true))
+  const faceMaker = track(tracker, new oc.BRepBuilderAPI_MakeFace_15(wBuilder.Wire(), true))
   faceMaker.Build()
   if (!faceMaker.IsDone()) throw new Error('jewelry: box face build failed')
   const vec = track(tracker, new oc.gp_Vec_4(0, 0, dz))
@@ -3637,11 +3677,11 @@ function _makeNgonPrism(oc: OcInstance, pts2D: number[][], zBase: number, h: num
     const edge = track(tracker, new oc.BRepBuilderAPI_MakeEdge_3(p0, p1))
     edge.Build()
     if (!edge.IsDone()) throw new Error('gemstone: ngon edge build failed')
-    wBuilder.Add_1(edge.Shape())
+    wBuilder.Add_1(edge.Edge())
   }
   wBuilder.Build()
   if (!wBuilder.IsDone()) throw new Error('gemstone: ngon wire build failed')
-  const faceMaker = track(tracker, new oc.BRepBuilderAPI_MakeFace_15(wBuilder.Shape(), true))
+  const faceMaker = track(tracker, new oc.BRepBuilderAPI_MakeFace_15(wBuilder.Wire(), true))
   faceMaker.Build()
   if (!faceMaker.IsDone()) throw new Error('gemstone: ngon face build failed')
   const vec = track(tracker, new oc.gp_Vec_4(0, 0, h))
@@ -4488,11 +4528,11 @@ function opRingShank(oc: OcInstance, _prev: OcHandle, node: OpNode, _sketches: S
     const edge = track(tracker, new oc.BRepBuilderAPI_MakeEdge_3(p0, p1))
     edge.Build()
     if (!edge.IsDone()) throw new Error('ring_shank: edge build failed')
-    wireBuilder.Add_1(edge.Shape())
+    wireBuilder.Add_1(edge.Edge())
   }
   wireBuilder.Build()
   if (!wireBuilder.IsDone()) throw new Error('ring_shank: profile wire build failed')
-  const wire = wireBuilder.Shape()
+  const wire = wireBuilder.Wire()
 
   // Make a face from the closed wire.
   const faceMaker = track(tracker, new oc.BRepBuilderAPI_MakeFace_15(wire, true))
@@ -4504,7 +4544,7 @@ function opRingShank(oc: OcInstance, _prev: OcHandle, node: OpNode, _sketches: S
   const origin = track(tracker, new oc.gp_Pnt_3(0, 0, 0))
   const zDir   = track(tracker, new oc.gp_Dir_4(0, 0, 1))
   const ax1    = track(tracker, new oc.gp_Ax1_2(origin, zDir))
-  const revol  = track(tracker, new oc.BRepPrimAPI_MakeRevol_2(profileFace, ax1, 2 * Math.PI, true))
+  const revol  = track(tracker, new oc.BRepPrimAPI_MakeRevol_2(profileFace, ax1, true))
   revol.Build()
   if (!revol.IsDone()) throw new Error('ring_shank: revolve failed')
   let shank = revol.Shape()
@@ -5287,12 +5327,12 @@ function opBangle(oc: OcInstance, _prev: OcHandle, node: OpNode, _sketches: Sket
       const edge = track(tracker, new oc.BRepBuilderAPI_MakeEdge_3(p0, p1))
       edge.Build()
       if (!edge.IsDone()) throw new Error('bangle: edge build failed')
-      wBuilder.Add_1(edge.Shape())
+      wBuilder.Add_1(edge.Edge())
     }
     wBuilder.Build()
     if (!wBuilder.IsDone()) throw new Error('bangle: profile wire failed')
 
-    const faceMaker = track(tracker, new oc.BRepBuilderAPI_MakeFace_15(wBuilder.Shape(), true))
+    const faceMaker = track(tracker, new oc.BRepBuilderAPI_MakeFace_15(wBuilder.Wire(), true))
     faceMaker.Build()
     if (!faceMaker.IsDone()) throw new Error('bangle: profile face failed')
 
@@ -5305,7 +5345,7 @@ function opBangle(oc: OcInstance, _prev: OcHandle, node: OpNode, _sketches: Sket
       revolAngle = (360 - openAng) * Math.PI / 180
     }
 
-    const revol = track(tracker, new oc.BRepPrimAPI_MakeRevol_2(faceMaker.Shape(), ax1, revolAngle, true))
+    const revol = track(tracker, new oc.BRepPrimAPI_MakeRevol_1(faceMaker.Shape(), ax1, revolAngle, true))
     revol.Build()
     if (!revol.IsDone()) throw new Error('bangle: revolve failed')
 
@@ -6448,11 +6488,11 @@ function opSheetFlange(oc: OcInstance, _prev: OcHandle, node: OpNode, _sk: Sketc
     const eBldr = track(tracker, new oc.BRepBuilderAPI_MakeEdge_3(pe0, pe1))
     eBldr.Build()
     if (!eBldr.IsDone()) throw new Error('sheet_metal_flange: flange edge build failed')
-    wBldr.Add_1(eBldr.Shape())
+    wBldr.Add_1(eBldr.Edge())
   }
   wBldr.Build()
   if (!wBldr.IsDone()) throw new Error('sheet_metal_flange: flange wire build failed')
-  const fFaceMk = track(tracker, new oc.BRepBuilderAPI_MakeFace_15(wBldr.Shape(), true))
+  const fFaceMk = track(tracker, new oc.BRepBuilderAPI_MakeFace_15(wBldr.Wire(), true))
   fFaceMk.Build()
   if (!fFaceMk.IsDone()) throw new Error('sheet_metal_flange: flange face build failed')
   const prismVec = track(tracker, new oc.gp_Vec_4(W, 0, 0))
@@ -6583,7 +6623,7 @@ export function harnessBuildCircleWire(oc, cx, cy, cz, r, tangent, nPts, tracker
     const edge = track(tracker, new oc.BRepBuilderAPI_MakeEdge_3(p0, p1))
     edge.Build()
     if (!edge.IsDone()) throw new Error('harness_tube_sweep: circle edge build failed')
-    wBuilder.Add_1(edge.Shape())
+    wBuilder.Add_1(edge.Edge())
   }
   wBuilder.Build()
   if (!wBuilder.IsDone()) throw new Error('harness_tube_sweep: circle wire build failed')
@@ -6664,11 +6704,11 @@ function opHarnessTubeSweep(oc: OcInstance, _prev: OcHandle, node: OpNode, _sk: 
     const edge = track(tracker, new oc.BRepBuilderAPI_MakeEdge_3(p0, p1))
     edge.Build()
     if (!edge.IsDone()) throw new Error(`harness_tube_sweep: path edge ${i}->${i + 1} build failed`)
-    pathBuilder.Add_1(edge.Shape())
+    pathBuilder.Add_1(edge.Edge())
   }
   pathBuilder.Build()
   if (!pathBuilder.IsDone()) throw new Error('harness_tube_sweep: path wire build failed')
-  const pathWire = pathBuilder.Shape()
+  const pathWire = pathBuilder.Wire()
 
   // --- 2. Build the circular profile wire at the first waypoint ---
   const tangent = harnessFirstTangent(wpts)
