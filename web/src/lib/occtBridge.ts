@@ -550,8 +550,8 @@ export function buildVariableRadiusLaw(
 // added by occtWorker.js when it pushes the mesh entry onto the postMessage
 // result (see geometry.ts's Mesh doc comment).
 
-const MESH_LINEAR_DEFLECTION = 0.1   // mm
-const MESH_ANGULAR_DEFLECTION = 0.5  // radians
+const MESH_LINEAR_DEFLECTION = 0.03  // mm — jewelry-scale parts need a fine mesh
+const MESH_ANGULAR_DEFLECTION = 0.25 // radians (~14°) so rings read round
 
 /** {@link Mesh} minus the two fields occtWorker.js attaches at push time. */
 export type BareMesh = Omit<Mesh, 'id' | 'faceNames'>
@@ -1062,7 +1062,7 @@ export function mirrorShape(oc: OcInstance, shape: OcHandle, origin: Vec3, norma
   const o = track(tracker, new oc.gp_Pnt_3(origin[0], origin[1], origin[2]))
   const d = track(tracker, new oc.gp_Dir_4(normal[0], normal[1], normal[2]))
   const ax2 = track(tracker, new oc.gp_Ax2_3(o, d))
-  trsf.SetMirror_2(ax2)
+  trsf.SetMirror_3(ax2)
   const xform = track(tracker, new oc.BRepBuilderAPI_Transform_2(shape, trsf, true))
   xform.Build(new oc.Message_ProgressRange_1())
   return xform.Shape()

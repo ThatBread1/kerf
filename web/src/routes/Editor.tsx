@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import TerminalPanel from '../components/TerminalPanel.jsx'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { TerminalSquare, Share2, Save, Loader2, ArrowLeft, Check, X, RotateCcw, Undo2, Redo2, GitBranch, MessageSquare, PanelRightClose, PanelRightOpen, PanelLeftOpen, Plus, Box, SlidersHorizontal, ChevronDown, ArrowRight, RotateCw, Activity as ActivityIcon, FileDown, LogOut, UserCog, Settings, Users } from 'lucide-react'
+import { TerminalSquare, Share2, Save, Loader2, ArrowLeft, Check, X, RotateCcw, Undo2, Redo2, GitBranch, MessageSquare, PanelRightClose, PanelRightOpen, PanelLeftOpen, PanelLeftClose, Plus, Box, SlidersHorizontal, ChevronDown, ArrowRight, RotateCw, Activity as ActivityIcon, FileDown, LogOut, UserCog, Settings, Users } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { LogoWordmark } from '../components/Logo.jsx'
 import FileTree from '../components/FileTree.jsx'
@@ -61,7 +61,7 @@ import { distance, formatDistance } from '../lib/measure.js'
 import { extractDisplayGeometryFromParts } from '../lib/femDisplacement.js'
 import { exportSvg, exportPng, exportPdf } from '../lib/svgExport.js'
 import { api } from '../lib/api.js'
-import { readCollapsed, CHAT_COLLAPSE_KEY, GIT_COLLAPSE_KEY } from '../lib/panelCollapse.js'
+import { readCollapsed, CHAT_COLLAPSE_KEY, GIT_COLLAPSE_KEY, writeCollapsed } from '../lib/panelCollapse.js'
 import { mateRefFromPick, parseAssembly } from '../lib/assembly.js'
 import { _internalLoops } from '../lib/sketchGeom2.js'
 import FileEditor from '../components/FileEditor.jsx'
@@ -1328,6 +1328,7 @@ export default function Editor() {
   }
 
   const [showShare, setShowShare] = useState(false)
+  const FILES_COLLAPSE_KEY = 'zl:filesCollapsed'
   // Unified right drawer — canonical state lives in the workspace store so
   // activity, chat, and git all share one open/tab pair.
   const rightDrawer = useWorkspace((s) => s.rightDrawer)
@@ -1336,14 +1337,22 @@ export default function Editor() {
   const setRightDrawerTab = useWorkspace((s) => s.setRightDrawerTab)
   // Backward-compat: seed "chat" tab from the old localStorage key so repeat
   // visitors who had chat open still see it open. One-time migration.
+  // Goldsmith fork: the chat starts closed (the modelling panels need the
+  // width); it reopens on later visits only if it was left open.
   useEffect(() => {
-    const wasOpen = !readCollapsed(CHAT_COLLAPSE_KEY, false)
+    const wasOpen = !readCollapsed(CHAT_COLLAPSE_KEY, true)
     if (wasOpen && !rightDrawer.open) {
       openRightDrawer('chat')
     }
     // intentionally run only once at mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  const chatShown = rightDrawer.open && rightDrawer.tab === 'chat'
+  useEffect(() => { writeCollapsed(CHAT_COLLAPSE_KEY, !chatShown) }, [chatShown])
+  // Collapsible file-tree column ("Soubory"), collapsed to a thin rail by
+  // default so the 3Design-style Strom / Nástroje panels get the room.
+  const [filesCollapsed, setFilesCollapsed] = useState(() => readCollapsed(FILES_COLLAPSE_KEY, true))
+  useEffect(() => { writeCollapsed(FILES_COLLAPSE_KEY, filesCollapsed) }, [filesCollapsed])
   // Keep the old git collapsed key around (read-only compat for tests that
   // probe GIT_COLLAPSE_KEY) — we no longer write it.
   void GIT_COLLAPSE_KEY
@@ -2018,12 +2027,37 @@ export default function Editor() {
       {/* The right drawer is an overlay — grid is always file-tree + canvas.
           The CSS rule in index.css sets 240px 1fr at ≥ lg. */}
       <div
-        className="flex-1 grid min-h-0 relative grid-cols-1 kerf-editor-grid"
+        className={`flex-1 grid min-h-0 relative grid-cols-1 kerf-editor-grid ${filesCollapsed ? 'zl-files-collapsed' : ''}`}
       >
         {/* Left: file tree (top) + objects panel (bottom).
             ≥ lg: inline aside, occupies the first grid column.
             < lg: hidden (drawer instance below renders the same content). */}
-        <aside id="editor-left" className="hidden lg:flex border-r border-ink-800 min-h-0 flex-col overflow-hidden">
+        {filesCollapsed && (
+          <aside className="hidden lg:flex flex-col items-center border-r border-ink-950 bg-ink-900 py-2 min-h-0" aria-label="Soubory (sbaleno)">
+            <button
+              type="button"
+              onClick={() => setFilesCollapsed(false)}
+              title="Zobrazit soubory projektu"
+              aria-label="Zobrazit soubory projektu"
+              data-testid="zl-files-expand"
+              className="flex flex-col items-center gap-2 px-1 py-2 rounded-md text-ink-200 hover:text-kerf-200 hover:bg-white/5"
+            >
+              <PanelLeftOpen size={15} aria-hidden="true" />
+              <span className="text-[11px] font-semibold tracking-wider [writing-mode:vertical-rl] rotate-180">Soubory</span>
+            </button>
+          </aside>
+        )}
+        <aside id="editor-left" className={`${filesCollapsed ? 'hidden' : 'hidden lg:flex'} border-r border-ink-800 min-h-0 flex-col overflow-hidden relative`}>
+          <button
+            type="button"
+            onClick={() => setFilesCollapsed(true)}
+            title="Skrýt soubory"
+            aria-label="Skrýt soubory"
+            data-testid="zl-files-collapse"
+            className="absolute top-2 right-2 z-10 p-1 rounded text-ink-300 hover:text-kerf-200 hover:bg-white/5"
+          >
+            <PanelLeftClose size={14} aria-hidden="true" />
+          </button>
           <div style={{ height: `${leftSplitPct}%` }} className="min-h-0">
             <FileTree
               files={w.files}
@@ -2133,7 +2167,7 @@ export default function Editor() {
                 title="Add per-file parameter overrides"
               >
                 <SlidersHorizontal size={10} />
-                Add variants
+                Přidat varianty
               </button>
             </div>
           )}

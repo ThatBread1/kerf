@@ -428,7 +428,8 @@ function loadOcct(): Promise<OcInstance> {
   if (ocPromise) return ocPromise
   ocPromise = (async () => {
     const mod = await import('opencascade.js/dist/opencascade.full.js')
-    const factory = mod.default || mod
+    // Emscripten MODULARIZE factory: called with `new`, resolves to the module.
+    const factory = (mod.default || mod) as unknown as new (opts: { locateFile: () => string }) => Promise<OcInstance>
     if (typeof factory !== 'function') {
       throw new Error('opencascade.js: emscripten factory not exported')
     }
@@ -4477,6 +4478,37 @@ function opRingShank(oc: OcInstance, _prev: OcHandle, node: OpNode, _sketches: S
   // We build a face from a closed wire with 4-8 points depending on profile.
   let profilePoints  // array of [dx, dz] relative to (clR, 0, 0)
 
+  // Smooth profiles are sampled densely (48 points) so the revolved band reads
+  // round once the renderer smooths normals; the upstream 4–8 point polygons
+  // gave a visibly octagonal "comfort fit".
+  const N_SMOOTH = 48
+  // 'closed' → one periodic-ish B-spline; 'dome' → flat inner line + spline
+  // dome; null → straight polygon edges (flat / euro / knife / tapered).
+  let smoothKind: 'closed' | 'dome' | null = null
+  // Superellipse |x/a|^n + |z/b|^n = 1 — n=2 ellipse, larger n squarer.
+  const superellipse = (a: number, b: number, n: number, from = 0, to = 2 * Math.PI, count = N_SMOOTH) => {
+    const pts: number[][] = []
+    for (let i = 0; i < count; i++) {
+      const t = from + ((to - from) * i) / count
+      const c = Math.cos(t), sn = Math.sin(t)
+      pts.push([a * Math.sign(c) * Math.abs(c) ** (2 / n), b * Math.sign(sn) * Math.abs(sn) ** (2 / n)])
+    }
+    return pts
+  }
+  // Flat inner face (x = -halfT) + domed outer half-superellipse.
+  const flatInsideDome = (n: number) => {
+    const pts: number[][] = [[-halfT, -halfW]]
+    for (let i = 0; i <= N_SMOOTH / 2; i++) {
+      const t = -Math.PI / 2 + (Math.PI * i) / (N_SMOOTH / 2)
+      const c = Math.cos(t), sn = Math.sin(t)
+      // dome spans x ∈ [-halfT, +halfT]: centre at -halfT, radius 2·halfT
+      pts.push([-halfT + 2 * halfT * Math.abs(c) ** (2 / n), halfW * Math.sign(sn) * Math.abs(sn) ** (2 / n)])
+    }
+    pts.push([-halfT, halfW])
+    // drop duplicate end points of the dome that coincide with the corners
+    return pts.filter((p, i, arr) => i === 0 || Math.hypot(p[0] - arr[i - 1][0], p[1] - arr[i - 1][1]) > 1e-6)
+  }
+
   switch (profile) {
     case 'flat':
     case 'euro':
@@ -4486,19 +4518,14 @@ function opRingShank(oc: OcInstance, _prev: OcHandle, node: OpNode, _sketches: S
       ]
       break
     case 'd_shape':
-      // Flat inside (−halfT), rounded outside. Approximate with 6 points.
-      profilePoints = [
-        [-halfT, -halfW], [0, -halfW], [halfT, -halfW * 0.7],
-        [halfT, halfW * 0.7], [0, halfW], [-halfT, halfW],
-      ]
+      // Flat inside, generously rounded outside.
+      profilePoints = flatInsideDome(3.0)
+      smoothKind = 'dome'
       break
     case 'half_round':
-      // Flat bottom (−halfT), dome on top.
-      profilePoints = [
-        [-halfT, -halfW], [halfT, -halfW], [halfT, 0],
-        [halfT * 0.7, halfW * 0.7], [0, halfW], [-halfT * 0.7, halfW * 0.7],
-        [-halfT, 0],
-      ]
+      // Flat inside, true half-round (elliptical) outside.
+      profilePoints = flatInsideDome(2.0)
+      smoothKind = 'dome'
       break
     case 'knife_edge': {
       // V-shape: wide at centre, tapers to knife edge at sides.
@@ -4520,28 +4547,55 @@ function opRingShank(oc: OcInstance, _prev: OcHandle, node: OpNode, _sketches: S
     }
     case 'comfort_fit':
     default:
-      // Domed outside, rounded inside: 8-point approximation of an oval cross-section.
-      profilePoints = [
-        [-halfT, -halfW], [0, -halfW], [halfT * 0.6, -halfW * 0.8],
-        [halfT, 0], [halfT * 0.6, halfW * 0.8], [0, halfW], [-halfT, halfW],
-        [-halfT * 0.8, 0],
-      ]
+      // Rounded inside and outside: a soft rounded rectangle, sampled from
+      // the inner side (t = π) so the single spline seam sits on the finger side.
+      profilePoints = superellipse(halfT, halfW, 3.2, Math.PI, 3 * Math.PI)
+      smoothKind = 'closed'
       break
   }
 
   // Build the profile face by constructing a closed wire in the XZ plane at y=0,
   // where x = clR + dx and z = dz.
   const wireBuilder = track(tracker, new oc.BRepBuilderAPI_MakeWire_1())
-  const n = profilePoints.length
-  for (let i = 0; i < n; i++) {
-    const [dx0, dz0] = profilePoints[i]
-    const [dx1, dz1] = profilePoints[(i + 1) % n]
-    const p0 = track(tracker, new oc.gp_Pnt_3(clR + dx0, 0, dz0))
-    const p1 = track(tracker, new oc.gp_Pnt_3(clR + dx1, 0, dz1))
+  const lineEdge = (a: number[], b: number[]) => {
+    const p0 = track(tracker, new oc.gp_Pnt_3(clR + a[0], 0, a[1]))
+    const p1 = track(tracker, new oc.gp_Pnt_3(clR + b[0], 0, b[1]))
     const edge = track(tracker, new oc.BRepBuilderAPI_MakeEdge_3(p0, p1))
     edge.Build()
     if (!edge.IsDone()) throw new Error('ring_shank: edge build failed')
-    wireBuilder.Add_1(edge.Edge())
+    return edge.Edge()
+  }
+  // Smooth B-spline through the sampled points (a single face once revolved,
+  // so the band shades without facet seams).
+  const splineEdge = (pts: number[][]) => {
+    const arr = track(tracker, new oc.TColgp_Array1OfPnt_2(1, pts.length))
+    pts.forEach(([dx, dz], i) => arr.SetValue(i + 1, track(tracker, new oc.gp_Pnt_3(clR + dx, 0, dz))))
+    const api = track(tracker, new oc.GeomAPI_PointsToBSpline_2(arr, 3, 8, oc.GeomAbs_Shape.GeomAbs_C2, 1e-4))
+    if (!api.IsDone()) throw new Error('ring_shank: profile spline fit failed')
+    const curve = track(tracker, new oc.Handle_Geom_Curve_2(api.Curve().get()))
+    const edge = track(tracker, new oc.BRepBuilderAPI_MakeEdge_24(curve))
+    if (!edge.IsDone()) throw new Error('ring_shank: spline edge failed')
+    return edge.Edge()
+  }
+  const n = profilePoints.length
+  let usedSpline = false
+  if (smoothKind && typeof oc.GeomAPI_PointsToBSpline_2 === 'function') {
+    try {
+      if (smoothKind === 'closed') {
+        wireBuilder.Add_1(splineEdge([...profilePoints, profilePoints[0]]))
+      } else {
+        // flatInsideDome: [innerBottom, dome…, innerTop] — dome as a spline,
+        // the flat inner face as a straight line closing the loop.
+        wireBuilder.Add_1(splineEdge(profilePoints))
+        wireBuilder.Add_1(lineEdge(profilePoints[n - 1], profilePoints[0]))
+      }
+      usedSpline = true
+    } catch {
+      usedSpline = false
+    }
+  }
+  if (!usedSpline) {
+    for (let i = 0; i < n; i++) wireBuilder.Add_1(lineEdge(profilePoints[i], profilePoints[(i + 1) % n]))
   }
   wireBuilder.Build()
   if (!wireBuilder.IsDone()) throw new Error('ring_shank: profile wire build failed')
@@ -6916,7 +6970,7 @@ function evaluateTree(oc: OcInstance, tree: FeatureNode[], sketches: SketchMap):
     if (current && currentFaceNamer) {
       try { _faceNames = currentFaceNamer(oc, current) || {} } catch { /* ignore */ }
     }
-    const node = { ...normalizeJewelryNode(raw as Record<string, unknown>), _sketches: sketches, _faceNames }
+    const node = { ...normalizeJewelryNode(raw), _sketches: sketches, _faceNames }
     let next
     try {
       switch (node.op) {
@@ -7706,7 +7760,7 @@ async function evaluateToFinalShape(
     if (current && currentFaceNamer) {
       try { _faceNames = currentFaceNamer(oc, current) || {} } catch { /* ignore */ }
     }
-    const node = { ...normalizeJewelryNode(raw as Record<string, unknown>), _sketches: sketches, _faceNames }
+    const node = { ...normalizeJewelryNode(raw), _sketches: sketches, _faceNames }
     let next
     try {
       switch (node.op) {

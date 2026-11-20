@@ -46,6 +46,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Trash2, ChevronUp, ChevronDown, Box, Circle, RotateCcw, Disc, Layers, Drill, Sigma, AlertTriangle, Loader2, Play, Move, Crosshair, GitBranch, Repeat, FlipHorizontal, PencilLine, Pointer, Waves, Layers3, Aperture, Plus, X, ChevronRight, LayoutGrid, Combine, Scissors, Grid3x3, MoreHorizontal, SlidersHorizontal, Zap, Eye, Shield, Wrench, AlignLeft, Activity, Code, Settings, Cpu, BarChart2, RefreshCw, Droplets, Wind, Gauge, Spline, TrendingUp, Maximize2, Wand2, GitMerge, SplitSquareHorizontal, Route, Ruler, ArrowUpDown, Workflow, Shuffle, Merge, Cuboid, Navigation, Share2, PackageOpen, BrainCircuit, Compass, Ungroup, Boxes, Pencil, PenLine, Eraser, ScanLine, Scan, FileSearch, FileOutput, Network, Component, LayoutDashboard, AlignCenter, ScanSearch, Sticker, FileText, LayoutTemplate } from 'lucide-react'
 import FeatureRenderer from './FeatureRenderer.jsx'
+import type { FeatureRendererHandle, ViewName } from './FeatureRenderer'
+import { ZlPanel, ZlIconButton, FeatureTreePanel, ToolPalette, PlacementSection } from './zlatnik/ZlPanels'
+import { opLabel, fieldLabel, optionLabel, opHint } from '../lib/zlatnik/cs'
+import type { ToolDef } from '../lib/zlatnik/tools'
+import { Check, Undo2, Redo2, HelpCircle, Focus } from 'lucide-react'
 import {
   runFeatures, prewarmOcct, newFeatureId,
   requestFaceOutline,
@@ -703,7 +708,12 @@ const FEATURE_KINDS = [
         { value: 'square_emerald',   label: 'Square emerald' },
       ] },
       { key: 'diameter_mm',         kind: 'number',  label: 'Diameter / long-axis (mm)', min: 0.5 },
-      { key: 'material',            kind: 'text',    label: 'Material' },
+      { key: 'material',            kind: 'select',  label: 'Material', options: [
+        { value: 'diamond',  label: 'Diamond' },
+        { value: 'ruby',     label: 'Ruby' },
+        { value: 'sapphire', label: 'Sapphire' },
+        { value: 'emerald',  label: 'Emerald (stone)' },
+      ] },
       { key: 'table_pct',           kind: 'number',  label: 'Table %',        min: 30, max: 90 },
       { key: 'crown_angle_deg',     kind: 'number',  label: 'Crown angle (°)', min: 10, max: 50 },
       { key: 'pavilion_angle_deg',  kind: 'number',  label: 'Pavilion angle (°)', min: 30, max: 55 },
@@ -772,10 +782,10 @@ const FEATURE_KINDS = [
     label: 'Ring Shank',
     icon: Circle,
     defaults: {
-      ring_size: 7,
-      system: 'us',
-      band_width: 4.0,
-      thickness: 1.8,
+      ring_size: 54,
+      system: 'eu',
+      band_width: 2.5,
+      thickness: 1.6,
       profile: 'comfort_fit',
       taper_ratio: 1.0,
       shoulder_style: 'plain',
@@ -5812,8 +5822,14 @@ export default function FeatureView({
 
   // Selected feature in the timeline (by id).
   const [selectedId, setSelectedId] = useState(null)
+  // Auto-select the last feature once when a file opens; after that an empty
+  // selection is deliberate (the ✓ "Hotovo" button clears it).
+  const autoSelectedRef = useRef(false)
   useEffect(() => {
-    if (!selectedId && tree.length > 0) setSelectedId(tree[tree.length - 1]?.id)
+    if (!autoSelectedRef.current && !selectedId && tree.length > 0) {
+      autoSelectedRef.current = true
+      setSelectedId(tree[tree.length - 1]?.id)
+    }
   }, [tree, selectedId])
 
   // Roving-tabindex index for the feature timeline (keyboard nav).
@@ -5932,7 +5948,8 @@ export default function FeatureView({
       }
       setEvalState((s) => ({ ...s, loading: true, error: null }))
       const t0 = performance.now()
-      const result = await runFeatures(tree, sketches)
+      // Suppressed nodes ("vypnout" in the tree) are skipped entirely.
+      const result = await runFeatures(tree.filter((n) => !n.suppressed), sketches)
       const ms = Math.round(performance.now() - t0)
       if (seq !== seqRef.current) return
       if ('stale' in result) return
@@ -6144,6 +6161,50 @@ export default function FeatureView({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [featureSelection, featurePickMode, selectedId])
 
+  // ---- Goldsmith workspace (3Design-style panels) ----
+  const rendererRef = useRef<FeatureRendererHandle | null>(null)
+  const [hoverTool, setHoverTool] = useState<ToolDef | null>(null)
+  const undoLastRevision = useWorkspace((s) => s.undoLastRevision)
+  const redoRevision = useWorkspace((s) => s.redoRevision)
+  const redoAvailable = useWorkspace((s) => (s.redoStack?.length ?? 0) > 0)
+
+  const addTool = useCallback((tool: ToolDef) => {
+    const nodes = tool.make({ tree, newId: newFeatureId })
+    if (!nodes.length) return
+    updateTree((arr) => [...arr, ...nodes])
+    // Select the node the designer will most likely tweak next: the last
+    // non-boolean one (for presets that's the stone).
+    const focus = [...nodes].reverse().find((n) => n.op !== 'boolean') || nodes[nodes.length - 1]
+    setSelectedId(focus.id)
+    setInspectorOpen(true)
+  }, [tree, updateTree])
+
+  const toggleSuppressed = useCallback((id) => {
+    updateTree((arr) => arr.map((n) => n.id === id ? { ...n, suppressed: !n.suppressed } : n))
+  }, [updateTree])
+
+  const metal = (parsedFeature?.metal as string) || '18k_yellow'
+  const setMetal = useCallback((m: string) => {
+    onChangeTree?.({ ...(parsedFeature || {}), features: tree, metal: m })
+  }, [onChangeTree, parsedFeature, tree])
+
+  // Per-body PBR material: gemstones keep their own material, every other
+  // body is metal in the file's chosen alloy.
+  const nodeMap = useMemo(() => {
+    const byId = new Map(tree.map((n) => [n.id, n]))
+    const map: Record<string, Record<string, unknown>> = {}
+    for (const m of meshes) {
+      const src = m?.mesh?.sourceNode ? byId.get(m.mesh.sourceNode) : null
+      if (m?.mesh?.sourceOp === 'gemstone' && src) map[m.id] = { ...(src as Record<string, unknown>), op: 'gemstone' }
+      else map[m.id] = { op: 'ring_shank', metal }
+    }
+    return map
+  }, [meshes, tree, metal])
+
+  const bodyCount = useMemo(() => tree.filter((n) => !n.suppressed && n.op !== 'boolean').length, [tree])
+
+  const setView = useCallback((v: ViewName) => rendererRef.current?.setView(v), [])
+
   // ---- Derived UI state ----
   const sketchFiles = useMemo(() => {
     return (files || []).filter((f) => {
@@ -6186,116 +6247,172 @@ export default function FeatureView({
 
   // ---- Render ----
   const selCount = featureSelection.faceIds.size + featureSelection.edgeIds.size
+  const helpTool = hoverTool
+  const helpText = helpTool
+    ? helpTool.hint
+    : selectedFeature
+      ? opHint(selectedFeature.op, KIND_BY_OP[selectedFeature.op]?.caption)
+      : ''
+  const inspector = selectedFeature ? (
+    <FeatureInspector
+      feature={selectedFeature}
+      tree={tree}
+      sketchPaths={sketchPaths}
+      selection={featureSelection}
+      pickMode={featurePickMode}
+      setFeaturePickMode={setFeaturePickMode}
+      setFeatureSelection={setFeatureSelection}
+      onPatch={(patch) => patchFeature(selectedFeature.id, patch)}
+      onMoveUp={() => moveFeature(selectedFeature.id, 'up')}
+      onMoveDown={() => moveFeature(selectedFeature.id, 'down')}
+      onDelete={() => removeFeature(selectedFeature.id)}
+    />
+  ) : (
+    <div className="p-4 text-[12px] text-ink-200 leading-relaxed">
+      Vyberte prvek ve Stromu, nebo přidejte nový z panelu <span className="text-kerf-200">Nástroje</span>.
+    </div>
+  )
+  const toolPalette = <ToolPalette bodyCount={bodyCount} onPick={addTool} onHover={setHoverTool} />
+  const viewBtn = (v: ViewName, label: string, short: string) => (
+    <button
+      key={v}
+      type="button"
+      onClick={() => setView(v)}
+      title={label}
+      aria-label={label}
+      className="h-7 min-w-7 px-1.5 rounded-md text-[11px] font-semibold text-ink-100 border border-ink-600/80 bg-ink-850 hover:border-kerf-300/70 hover:text-kerf-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kerf-300/60"
+    >
+      {short}
+    </button>
+  )
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-ink-950 text-ink-100">
-      {/* Unified toolbar — add-feature popover + file name + timeline chips
-          on the left; pick-mode controls + inspector toggle on the right. */}
-      <div className="border-b border-ink-800 bg-ink-900 px-3 h-11 flex items-center gap-2">
+    <div className="absolute inset-0 flex flex-col bg-ink-950 text-ink-100" data-testid="zl-workspace">
+      {/* Toolbar — catalog popover, metal, standard views, pick modes. */}
+      <div className="border-b border-ink-950 bg-gradient-to-b from-ink-700 to-ink-850 px-2 h-11 flex items-center gap-2 overflow-x-auto scrollbar-thin">
         <AddFeaturePopover onPick={(op) => addFeature(op)} />
-
-        <span className="w-px h-5 bg-ink-800 mx-0.5 flex-shrink-0" aria-hidden="true" />
-
-        <span
-          className="text-xs text-ink-400 truncate max-w-[120px] sm:max-w-[160px] flex-shrink-0"
-          title={fileName}
-        >
-          {fileName}
-        </span>
-
-        {/* Timeline — scroll horizontally if it gets long.
-            role="tree" + role="treeitem" for a11y even though it is a flat
-            timeline (aria-level="1" throughout).
-            Keyboard: ArrowLeft/Right move between chips (roving tabindex). */}
-        <div
-          ref={timelineRef}
-          role="tree"
-          aria-label="Feature timeline"
-          className="flex-1 min-w-0 flex items-center gap-1 overflow-x-auto scrollbar-thin"
-          title={tree.length > 1 ? 'Selections may reset after structural changes.' : undefined}
-          onKeyDown={handleTimelineKeyDown}
-        >
-          {tree.length === 0 ? (
-            <span className="text-xs text-ink-500 italic">
-              No features yet — click <span className="text-ink-300">Add feature</span> to start.
-            </span>
-          ) : (
-            tree.map((node, idx) => {
-              const kind = KIND_BY_OP[node.op]
-              const Icon = kind?.icon || Box
-              const isSel = node.id === selectedId
-              return (
-                <FeatureTimelineChip
-                  key={node.id}
-                  node={node}
-                  kind={kind}
-                  Icon={Icon}
-                  idx={idx}
-                  isSel={isSel}
-                  rovingTabIndex={idx === rovingIdx ? 0 : -1}
-                  onSelect={() => { setSelectedId(node.id); setRovingIdx(idx); setInspectorOpen(true) }}
-                  onDelete={() => { if (confirm(`Delete ${kind?.label || node.op} '${node.id}'?`)) removeFeature(node.id) }}
-                />
-              )
-            })
-          )}
+        <span className="w-px h-5 bg-ink-600 flex-shrink-0" aria-hidden="true" />
+        <span className="text-xs text-ink-100 font-medium truncate max-w-[160px] flex-shrink-0" title={fileName}>{fileName}</span>
+        <span className="w-px h-5 bg-ink-600 flex-shrink-0" aria-hidden="true" />
+        <label className="flex items-center gap-1.5 text-[11px] text-ink-200 flex-shrink-0">
+          Kov
+          <select
+            value={metal}
+            onChange={(e) => setMetal(e.target.value)}
+            aria-label="Kov"
+            data-testid="zl-metal"
+            className="h-7 px-1.5 rounded-md bg-ink-900 border border-ink-600 text-[12px] text-ink-50 focus:outline-none focus:border-kerf-300/70"
+          >
+            <option value="18k_yellow">Žluté zlato 18k (750)</option>
+            <option value="14k_yellow">Žluté zlato 14k (585)</option>
+            <option value="18k_white">Bílé zlato 18k (750)</option>
+            <option value="14k_white">Bílé zlato 14k (585)</option>
+            <option value="18k_rose">Růžové zlato 18k (750)</option>
+            <option value="14k_rose">Růžové zlato 14k (585)</option>
+            <option value="sterling_925">Stříbro 925</option>
+            <option value="platinum_950">Platina 950</option>
+          </select>
+        </label>
+        <span className="w-px h-5 bg-ink-600 flex-shrink-0" aria-hidden="true" />
+        <div className="flex items-center gap-1 flex-shrink-0" role="group" aria-label="Pohled">
+          {viewBtn('iso', 'Izometrický pohled', 'ISO')}
+          {viewBtn('front', 'Pohled zepředu', 'Zp')}
+          {viewBtn('top', 'Pohled shora', 'Sh')}
+          {viewBtn('right', 'Pohled zprava', 'Zl')}
+          <button
+            type="button"
+            onClick={() => rendererRef.current?.zoomAll()}
+            title="Zoom vše"
+            aria-label="Zoom vše"
+            className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-100 border border-ink-600/80 bg-ink-850 hover:border-kerf-300/70 hover:text-kerf-100"
+          >
+            <Focus size={13} aria-hidden="true" />
+          </button>
         </div>
-
-        {/* Pick-mode controls (right side). */}
+        <div className="flex-1" />
         <div className="flex items-center gap-1 flex-shrink-0">
           <ModeBtn
             active={featurePickMode === 'face'}
             onClick={() => setFeaturePickMode(featurePickMode === 'face' ? null : 'face')}
             icon={Pointer}
-            label="Faces"
-            title="Click faces to select. Shift-click to add. Drives Shell/face_ids of the active feature."
+            label="Plochy"
+            title="Klikáním vybírejte plochy (Shift přidá)."
           />
           <ModeBtn
             active={featurePickMode === 'edge'}
             onClick={() => setFeaturePickMode(featurePickMode === 'edge' ? null : 'edge')}
             icon={Pointer}
-            label="Edges"
-            title="Click edges to select. Shift-click to add. Drives Fillet/Chamfer manual edge_ids."
+            label="Hrany"
+            title="Klikáním vybírejte hrany (Shift přidá) — pro zaoblení a sražení."
           />
-          <span className="w-px h-5 bg-ink-800 mx-1" aria-hidden="true" />
           <ModeBtn
             active={featurePickMode === 'pushpull'}
             onClick={() => setFeaturePickMode(featurePickMode === 'pushpull' ? null : 'pushpull')}
             icon={Move}
-            label="Push/Pull"
-            title="Drag a face along its normal. Release to commit a Pad/Pocket."
+            label="Táhnout"
+            title="Táhněte plochu podél normály."
           />
-          <ModeBtn
-            active={featurePickMode === 'sketch_on_face'}
-            onClick={() => setFeaturePickMode(featurePickMode === 'sketch_on_face' ? null : 'sketch_on_face')}
-            icon={PencilLine}
-            label="Sketch on face"
-            title="Click a planar face to create a new sketch on it."
-          />
-          {/* Inspector toggle — only visible on narrow viewports (< md). */}
           <button
             type="button"
             onClick={() => setInspectorOpen((v) => !v)}
-            aria-label={inspectorOpen ? 'Close inspector' : 'Open inspector'}
+            aria-label={inspectorOpen ? 'Zavřít vlastnosti' : 'Otevřít vlastnosti'}
             aria-expanded={inspectorOpen}
             aria-controls="feature-inspector-panel"
-            className={`md:hidden inline-flex items-center justify-center w-7 h-7 rounded-md border text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kerf-300/60
-              ${inspectorOpen
-                ? 'border-kerf-300/60 bg-kerf-300/15 text-kerf-100'
-                : 'border-ink-700 bg-transparent text-ink-300 hover:bg-ink-800'}`}
+            className={`md:hidden inline-flex items-center justify-center w-7 h-7 rounded-md border text-xs ${inspectorOpen ? 'border-kerf-300/60 bg-kerf-300/15 text-kerf-100' : 'border-ink-600 text-ink-200'}`}
           >
             <SlidersHorizontal size={13} aria-hidden="true" />
           </button>
         </div>
       </div>
 
-      {/* Main: viewport + inspector.
-          ≥ md: side-by-side grid (1fr 280px), inspector always visible.
-          < md: stacked; inspector is an off-canvas overlay anchored to the
-                bottom (slides up, covers ~60% of height). */}
-      <div className="flex-1 min-h-0 relative md:grid" style={{ gridTemplateColumns: '1fr 280px' }}>
+      <div className="flex-1 min-h-0 relative zl-feature-grid">
+        {/* Left: Strom + Vlastnosti */}
+        <aside className="zl-panel hidden md:flex flex-col min-h-0 border-r border-ink-950" aria-label="Strom a vlastnosti">
+          <ZlPanel title="Strom" className="flex-[2] min-h-[140px]" testId="zl-panel-tree">
+            <FeatureTreePanel
+              tree={tree}
+              selectedId={selectedId}
+              kindByOp={KIND_BY_OP}
+              fileName={fileName}
+              onSelect={(id) => { setSelectedId(id); setInspectorOpen(true) }}
+              onToggleSuppressed={toggleSuppressed}
+              onDelete={(id) => {
+                const n = tree.find((x) => x.id === id)
+                if (n && confirm(`Smazat „${opLabel(n.op, KIND_BY_OP[n.op]?.label)}“?`)) removeFeature(id)
+              }}
+              onMove={moveFeature}
+            />
+          </ZlPanel>
+          <ZlPanel
+            title="Vlastnosti"
+            className="flex-[3] min-h-[200px] border-t border-ink-950"
+            testId="zl-panel-props"
+            actions={(
+              <>
+                <ZlIconButton label="Hotovo" tone="ok" disabled={!selectedFeature} onClick={() => setSelectedId(null)} testId="zl-props-done"><Check size={15} /></ZlIconButton>
+                <ZlIconButton
+                  label="Smazat prvek"
+                  tone="danger"
+                  disabled={!selectedFeature}
+                  onClick={() => {
+                    if (selectedFeature && confirm(`Smazat „${opLabel(selectedFeature.op, KIND_BY_OP[selectedFeature.op]?.label)}“?`)) removeFeature(selectedFeature.id)
+                  }}
+                  testId="zl-props-delete"
+                ><X size={15} /></ZlIconButton>
+                <ZlIconButton label="Zpět (Ctrl+Z)" onClick={() => { void undoLastRevision() }}><Undo2 size={14} /></ZlIconButton>
+                <ZlIconButton label="Znovu (Ctrl+Shift+Z)" disabled={!redoAvailable} onClick={() => { void redoRevision() }}><Redo2 size={14} /></ZlIconButton>
+              </>
+            )}
+          >
+            {inspector}
+          </ZlPanel>
+        </aside>
+
+        {/* Centre: viewport */}
         <main className="relative min-h-0 min-w-0 h-full">
           <FeatureRenderer
+            ref={rendererRef}
             meshes={meshes}
+            nodeMap={nodeMap}
             selection={featureSelection}
             // FeatureRenderer only implements click behavior for face/edge/pushpull
             // (FeatureRendererProps['pickMode']); FeatureView also drives one-shot
@@ -6308,105 +6425,115 @@ export default function FeatureView({
             className="w-full h-full"
           />
           {evalState.loading && (
-            <div className="absolute top-3 left-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-ink-900/85 backdrop-blur border border-ink-700 text-[11px] text-ink-200 shadow-lg shadow-black/30">
+            <div className="absolute top-3 left-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-ink-900/85 backdrop-blur border border-ink-600 text-[11px] text-ink-100 shadow-lg shadow-black/30">
               <Loader2 size={11} className="animate-spin text-kerf-300" aria-hidden="true" />
-              <span>Evaluating</span>
+              <span>Počítám model…</span>
+            </div>
+          )}
+          {!evalState.loading && tree.length === 0 && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="max-w-sm text-center px-6 py-5 rounded-xl bg-ink-950/55 border border-ink-600/60 backdrop-blur-sm">
+                <div className="text-base font-semibold text-ink-50">Prázdný model</div>
+                <div className="mt-1.5 text-[13px] text-ink-200 leading-relaxed">
+                  Začněte v panelu <span className="text-kerf-200">Nástroje</span> — např. <span className="text-kerf-200">Prsteny → Solitér</span> vytvoří hotový prsten s kamenem.
+                </div>
+              </div>
             </div>
           )}
           {featurePickMode && (
             <div className="absolute top-3 right-3 inline-flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-md bg-kerf-300/15 backdrop-blur border border-kerf-300/40 text-[11px] text-kerf-100 shadow-lg shadow-black/30">
               <Crosshair size={11} aria-hidden="true" />
               <span>
-                {featurePickMode === 'pushpull' && 'Push/Pull · drag a face'}
-                {featurePickMode === 'sketch_on_face' && 'Click a planar face'}
-                {featurePickMode === 'face' && 'Click faces · shift to add'}
-                {featurePickMode === 'edge' && 'Click edges · shift to add'}
-                {featurePickMode === 'one_shot_face' && 'Pick a face'}
-                {featurePickMode === 'one_shot_edge' && 'Pick an edge'}
-                {featurePickMode === 'one_shot_axis' && 'Pick an edge for axis'}
-                {featurePickMode === 'one_shot_plane' && 'Pick a face for plane'}
+                {featurePickMode === 'pushpull' && 'Táhnout · chyťte plochu'}
+                {featurePickMode === 'sketch_on_face' && 'Klikněte na rovinnou plochu'}
+                {featurePickMode === 'face' && 'Klikejte na plochy · Shift přidá'}
+                {featurePickMode === 'edge' && 'Klikejte na hrany · Shift přidá'}
+                {featurePickMode === 'one_shot_face' && 'Vyberte plochu'}
+                {featurePickMode === 'one_shot_edge' && 'Vyberte hranu'}
+                {featurePickMode === 'one_shot_axis' && 'Vyberte hranu jako osu'}
+                {featurePickMode === 'one_shot_plane' && 'Vyberte plochu jako rovinu'}
               </span>
               <button
                 type="button"
                 onClick={() => setFeaturePickMode(null)}
-                aria-label="Cancel pick mode"
-                className="ml-0.5 inline-flex items-center justify-center w-4 h-4 rounded text-kerf-200 hover:text-white hover:bg-kerf-300/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kerf-300/60"
-                title="Cancel pick"
+                aria-label="Zrušit výběr"
+                className="ml-0.5 inline-flex items-center justify-center w-4 h-4 rounded text-kerf-200 hover:text-white hover:bg-kerf-300/20"
+                title="Zrušit výběr"
               >
                 <X size={10} aria-hidden="true" />
               </button>
             </div>
           )}
+          {/* < lg: the tool palette is a floating drawer instead of a column. */}
+          <ToolsDrawer>{toolPalette}</ToolsDrawer>
         </main>
 
-        {/* Right: inspector — always visible at ≥ md; drawer overlay at < md. */}
-        {/* Backdrop for the mobile drawer */}
-        {inspectorOpen && (
-          <div
-            className="md:hidden fixed inset-0 z-30 bg-black/40"
-            aria-hidden="true"
-            onClick={() => setInspectorOpen(false)}
-          />
-        )}
-        <aside
-          id="feature-inspector-panel"
-          aria-label="Feature inspector"
-          className={`
-            md:border-l md:border-ink-800 md:bg-ink-900/60 md:min-h-0 md:overflow-y-auto md:static md:translate-y-0 md:z-auto md:block md:shadow-none
-            fixed bottom-0 left-0 right-0 z-40 max-h-[65vh] overflow-y-auto rounded-t-xl border-t border-ink-700 bg-ink-900 shadow-2xl shadow-black/60 transition-transform duration-200
-            ${inspectorOpen ? 'translate-y-0' : 'translate-y-full md:translate-y-0'}
-          `}
-        >
-          {/* Mobile handle — tap to close */}
-          <button
-            type="button"
-            className="md:hidden flex justify-center py-2 w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kerf-300/60 rounded-t-xl"
-            onClick={() => setInspectorOpen(false)}
-            aria-label="Close inspector"
-          >
-            <span className="w-8 h-1 rounded-full bg-ink-600" aria-hidden="true" />
-          </button>
-          {!selectedFeature ? (
-            <div className="p-4 text-xs text-ink-500 italic">
-              Select a feature in the timeline to edit its parameters.
+        {/* Right: Nástroje + Nápověda */}
+        <aside className="zl-panel hidden lg:flex flex-col min-h-0 border-l border-ink-950" aria-label="Nástroje a nápověda">
+          <ZlPanel title="Nástroje" className="flex-[3] min-h-[200px]" testId="zl-panel-tools">
+            {toolPalette}
+          </ZlPanel>
+          <ZlPanel title="Nápověda" className="flex-[1] min-h-[110px] border-t border-ink-950" testId="zl-panel-help">
+            <div className="px-3 py-2.5 text-[12px] leading-relaxed text-ink-100" data-testid="zl-help">
+              {helpText ? (
+                <>
+                  <div className="flex items-center gap-1.5 mb-1 text-kerf-200 font-semibold">
+                    <HelpCircle size={13} aria-hidden="true" />
+                    {helpTool ? helpTool.label : selectedFeature ? opLabel(selectedFeature.op, KIND_BY_OP[selectedFeature.op]?.label) : ''}
+                  </div>
+                  {helpText}
+                </>
+              ) : (
+                <ul className="space-y-1 text-ink-200">
+                  <li><b className="text-ink-50">Otáčení:</b> levé tlačítko myši</li>
+                  <li><b className="text-ink-50">Posun:</b> pravé tlačítko myši</li>
+                  <li><b className="text-ink-50">Zoom:</b> kolečko myši</li>
+                  <li>Najetím na nástroj se zde ukáže popis.</li>
+                </ul>
+              )}
             </div>
-          ) : (
-            <FeatureInspector
-              feature={selectedFeature}
-              tree={tree}
-              sketchPaths={sketchPaths}
-              selection={featureSelection}
-              pickMode={featurePickMode}
-              setFeaturePickMode={setFeaturePickMode}
-              setFeatureSelection={setFeatureSelection}
-              onPatch={(patch) => patchFeature(selectedFeature.id, patch)}
-              onMoveUp={() => moveFeature(selectedFeature.id, 'up')}
-              onMoveDown={() => moveFeature(selectedFeature.id, 'down')}
-              onDelete={() => removeFeature(selectedFeature.id)}
-            />
-          )}
+          </ZlPanel>
         </aside>
       </div>
 
-      {/* Bottom: status bar — eval/error left, selection summary middle,
-          re-evaluate right. */}
-      <div className="flex items-center gap-3 px-3 h-7 border-t border-ink-800 bg-ink-900 text-[11px] font-mono text-ink-500 flex-shrink-0">
+      {/* < md: properties as a bottom sheet */}
+      {inspectorOpen && (
+        <div className="md:hidden fixed inset-0 z-30 bg-black/40" aria-hidden="true" onClick={() => setInspectorOpen(false)} />
+      )}
+      <aside
+        id="feature-inspector-panel"
+        aria-label="Vlastnosti"
+        className={`md:hidden fixed bottom-0 left-0 right-0 z-40 max-h-[65vh] overflow-y-auto rounded-t-xl border-t border-ink-600 bg-ink-900 shadow-2xl shadow-black/60 transition-transform duration-200 ${inspectorOpen ? 'translate-y-0' : 'translate-y-full'}`}
+      >
+        <button
+          type="button"
+          className="flex justify-center py-2 w-full"
+          onClick={() => setInspectorOpen(false)}
+          aria-label="Zavřít vlastnosti"
+        >
+          <span className="w-8 h-1 rounded-full bg-ink-500" aria-hidden="true" />
+        </button>
+        {inspector}
+      </aside>
+
+      {/* Status bar */}
+      <div className="flex items-center gap-3 px-3 h-7 border-t border-ink-950 bg-ink-900 text-[11px] font-mono text-ink-300 flex-shrink-0" data-testid="zl-status">
         {evalState.error ? (
-          <span className="inline-flex items-center gap-1.5 text-red-400 min-w-0">
+          <span className="inline-flex items-center gap-1.5 text-red-300 min-w-0" data-testid="zl-eval-error">
             <AlertTriangle size={11} className="flex-shrink-0" aria-hidden="true" />
             <span className="truncate" title={evalState.error}>{evalState.error}</span>
           </span>
         ) : (
           <span className="inline-flex items-center gap-1.5">
-            <span className="text-ink-300">{vertexCount.toLocaleString()}</span>
-            <span className="text-ink-500">vertices</span>
-            <span className="text-ink-700" aria-hidden="true">·</span>
-            <span className="text-ink-300">{meshes.length}</span>
-            <span className="text-ink-500">{meshes.length === 1 ? 'body' : 'bodies'}</span>
+            <span className="text-ink-100">{meshes.length}</span>
+            <span>{meshes.length === 1 ? 'těleso' : meshes.length >= 2 && meshes.length <= 4 ? 'tělesa' : 'těles'}</span>
+            <span className="text-ink-600" aria-hidden="true">·</span>
+            <span className="text-ink-100">{vertexCount.toLocaleString('cs-CZ')}</span>
+            <span>vrcholů</span>
             {evalState.ms != null && (
               <>
-                <span className="text-ink-700" aria-hidden="true">·</span>
-                <span>{evalState.ms}ms</span>
+                <span className="text-ink-600" aria-hidden="true">·</span>
+                <span>{evalState.ms} ms</span>
               </>
             )}
           </span>
@@ -6415,36 +6542,59 @@ export default function FeatureView({
         {selCount > 0 && (
           <>
             <span className="inline-flex items-center gap-1.5">
-              <span className="text-ink-500">Sel</span>
-              <span className="text-ink-300">{featureSelection.faceIds.size}</span>
-              <span className="text-ink-500">{featureSelection.faceIds.size === 1 ? 'face' : 'faces'}</span>
-              <span className="text-ink-700" aria-hidden="true">·</span>
-              <span className="text-ink-300">{featureSelection.edgeIds.size}</span>
-              <span className="text-ink-500">{featureSelection.edgeIds.size === 1 ? 'edge' : 'edges'}</span>
+              <span>Vybráno</span>
+              <span className="text-ink-100">{featureSelection.faceIds.size}</span>
+              <span>ploch</span>
+              <span className="text-ink-600" aria-hidden="true">·</span>
+              <span className="text-ink-100">{featureSelection.edgeIds.size}</span>
+              <span>hran</span>
             </span>
             <button
               type="button"
               onClick={() => clearFeatureSelection()}
-              aria-label="Clear viewport selection"
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-ink-400 hover:text-kerf-300 hover:bg-ink-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kerf-300/60"
-              title="Clear viewport selection"
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-ink-300 hover:text-kerf-300 hover:bg-ink-800"
+              title="Zrušit výběr"
             >
-              clear
+              zrušit
             </button>
-            <span className="w-px h-4 bg-ink-800" aria-hidden="true" />
+            <span className="w-px h-4 bg-ink-700" aria-hidden="true" />
           </>
         )}
         <button
           type="button"
           onClick={() => triggerEvaluate()}
-          aria-label="Force re-evaluation"
-          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-ink-300 hover:text-kerf-300 hover:bg-ink-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kerf-300/60"
-          title="Force re-evaluation"
+          aria-label="Přepočítat"
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-ink-200 hover:text-kerf-300 hover:bg-ink-800"
+          title="Přepočítat model"
         >
           <Play size={10} aria-hidden="true" />
-          <span>Re-evaluate</span>
+          <span>Přepočítat</span>
         </button>
       </div>
+    </div>
+  )
+}
+
+// Floating "Nástroje" drawer for viewports narrower than lg, where the right
+// column is hidden.
+function ToolsDrawer({ children }: { children: React.ReactNode }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="lg:hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="absolute bottom-3 right-3 z-20 inline-flex items-center gap-1.5 px-3 h-9 rounded-full bg-kerf-300 text-ink-950 text-sm font-semibold shadow-lg shadow-black/40"
+      >
+        <Wrench size={14} aria-hidden="true" />
+        Nástroje
+      </button>
+      {open && (
+        <div className="absolute top-2 right-2 bottom-14 z-20 w-[290px] max-w-[85%] zl-panel rounded-xl border border-ink-600 shadow-2xl shadow-black/60 overflow-y-auto" onClick={(e) => { if ((e.target as HTMLElement).closest('[data-testid^="zl-tool-"]')) setOpen(false) }}>
+          {children}
+        </div>
+      )}
     </div>
   )
 }
@@ -6719,7 +6869,10 @@ function FeatureInspector({
   const bodyFeatures = useMemo(() => {
     const idx = tree.findIndex((n) => n.id === feature.id)
     if (idx < 0) return []
-    return tree.slice(0, idx).filter((n) => n.op === 'pad' || n.op === 'revolve' || n.op === 'pocket' || n.op === 'fillet' || n.op === 'chamfer' || n.op === 'shell' || n.op === 'hole' || n.op === 'push_pull' || n.op === 'linear_pattern' || n.op === 'polar_pattern' || n.op === 'mirror_pattern')
+    // Every earlier node that produces a body can be picked (rings, settings,
+    // stones and solids included — boolean A/B needs them), not just the
+    // sketch-based mechanical ops the upstream list was limited to.
+    return tree.slice(0, idx).filter((n) => !n.suppressed)
   }, [tree, feature.id])
 
   if (!kind) {
@@ -6747,7 +6900,7 @@ function FeatureInspector({
           <Icon size={13} className="text-kerf-200" />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-medium text-ink-100 leading-tight">{kind.label}</div>
+          <div className="text-sm font-medium text-ink-100 leading-tight">{opLabel(feature.op, kind.label)}</div>
           <div className="text-[10px] text-ink-500 font-mono truncate" title={feature.id}>
             {feature.id}
           </div>
@@ -6756,27 +6909,27 @@ function FeatureInspector({
           <button
             type="button"
             onClick={onMoveUp}
-            aria-label="Move feature up in timeline"
+            aria-label="Posunout výš"
             className="inline-flex items-center justify-center w-6 h-6 rounded text-ink-400 hover:text-kerf-300 hover:bg-ink-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kerf-300/60"
-            title="Move up in timeline"
+            title="Posunout výš"
           >
             <ChevronUp size={13} aria-hidden="true" />
           </button>
           <button
             type="button"
             onClick={onMoveDown}
-            aria-label="Move feature down in timeline"
+            aria-label="Posunout níž"
             className="inline-flex items-center justify-center w-6 h-6 rounded text-ink-400 hover:text-kerf-300 hover:bg-ink-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kerf-300/60"
-            title="Move down in timeline"
+            title="Posunout níž"
           >
             <ChevronDown size={13} aria-hidden="true" />
           </button>
           <button
             type="button"
             onClick={onDelete}
-            aria-label={`Delete ${kind.label} feature`}
+            aria-label="Smazat prvek"
             className="inline-flex items-center justify-center w-6 h-6 rounded text-ink-400 hover:text-red-300 hover:bg-red-900/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/60"
-            title="Delete this feature"
+            title="Smazat prvek"
           >
             <Trash2 size={12} aria-hidden="true" />
           </button>
@@ -6795,7 +6948,7 @@ function FeatureInspector({
               htmlFor={complexKinds.includes(field.kind) ? undefined : fieldId}
               className="block text-[11px] font-medium text-ink-300"
             >
-              {field.label}
+              {fieldLabel(field.label)}
             </label>
             {field.kind === 'number' && (
               <input
@@ -6809,7 +6962,7 @@ function FeatureInspector({
                 min={field.min}
                 max={field.max}
                 step={field.step ?? 'any'}
-                aria-label={field.label}
+                aria-label={fieldLabel(field.label)}
                 className={inputCls}
               />
             )}
@@ -6819,7 +6972,7 @@ function FeatureInspector({
                 type="text"
                 value={feature[field.key] ?? ''}
                 onChange={(ev) => onPatch({ [field.key]: ev.target.value })}
-                aria-label={field.label}
+                aria-label={fieldLabel(field.label)}
                 className={inputCls}
               />
             )}
@@ -6828,11 +6981,11 @@ function FeatureInspector({
                 id={fieldId}
                 value={feature[field.key] ?? field.options?.[0]?.value}
                 onChange={(ev) => onPatch({ [field.key]: ev.target.value })}
-                aria-label={field.label}
+                aria-label={fieldLabel(field.label)}
                 className={selectCls}
               >
                 {(field.options || []).map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
+                  <option key={o.value} value={o.value}>{optionLabel(o.label)}</option>
                 ))}
               </select>
             )}
@@ -6841,7 +6994,7 @@ function FeatureInspector({
                 id={fieldId}
                 value={feature[field.key] ?? ''}
                 onChange={(ev) => onPatch({ [field.key]: ev.target.value })}
-                aria-label={field.label}
+                aria-label={fieldLabel(field.label)}
                 className={selectCls + ' font-mono'}
               >
                 <option value="">— pick a sketch —</option>
@@ -6855,12 +7008,12 @@ function FeatureInspector({
                 id={fieldId}
                 value={feature[field.key] ?? ''}
                 onChange={(ev) => onPatch({ [field.key]: ev.target.value })}
-                aria-label={field.label}
+                aria-label={fieldLabel(field.label)}
                 className={selectCls + ' font-mono'}
               >
-                <option value="">— pick a feature —</option>
+                <option value="">— vyberte prvek —</option>
                 {bodyFeatures.map((n) => (
-                  <option key={n.id} value={n.id}>{n.id} ({n.op})</option>
+                  <option key={n.id} value={n.id}>{tree.indexOf(n) + 1}. {opLabel(n.op, KIND_BY_OP[n.op]?.label)} ({n.id})</option>
                 ))}
               </select>
             )}
@@ -6913,9 +7066,9 @@ function FeatureInspector({
                   checked={feature[field.key] === true}
                   onChange={(ev) => onPatch({ [field.key]: ev.target.checked })}
                   className="w-3.5 h-3.5 accent-kerf-300"
-                  aria-label={field.label}
+                  aria-label={fieldLabel(field.label)}
                 />
-                <span className="text-ink-300 text-sm">{feature[field.key] === true ? 'on' : 'off'}</span>
+                <span className="text-ink-300 text-sm">{feature[field.key] === true ? 'ano' : 'ne'}</span>
               </label>
             )}
             {field.kind === 'sketch_path_list' && (
@@ -6939,12 +7092,13 @@ function FeatureInspector({
         )
       })}
       {/* Caption — optional explanatory note for ops that benefit from one (e.g. surface_boolean). */}
-      {kind.caption && (
-        <div className="mx-3 mb-3 px-2 py-2 rounded bg-ink-800/60 border border-ink-700/50 text-[10px] text-ink-400 leading-relaxed">
-          {kind.caption}
+      {opHint(feature.op, kind.caption) && (
+        <div className="mb-1 px-2 py-2 rounded bg-ink-950/40 border border-ink-700/60 text-[11px] text-ink-200 leading-relaxed">
+          {opHint(feature.op, kind.caption)}
         </div>
       )}
       </div>
+      <PlacementSection feature={feature} onPatch={onPatch} />
     </div>
   )
 }

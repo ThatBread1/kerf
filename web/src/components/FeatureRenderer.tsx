@@ -45,6 +45,7 @@ import { disposeObject } from '../lib/threeNarrow.js'
 import { MonitorX } from 'lucide-react'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
+import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { VIEWPORT_BG, GRID_MAJOR, GRID_MINOR, makeViewportGradient } from '../lib/viewportBackground.js'
 import { cullByFrustum, frustumCullEnabled } from '../lib/frustumCull.js'
 import { materialFor } from '../lib/jewelryMaterials.js'
@@ -78,8 +79,29 @@ interface FeatureRendererProps {
   className?: string
 }
 
+export type ViewName = 'iso' | 'top' | 'bottom' | 'front' | 'back' | 'left' | 'right'
+
 export interface FeatureRendererHandle {
   snapshot: () => string | undefined
+  /** Orient the camera to a standard view (3Design "Pohled"), framing all bodies. */
+  setView: (view: ViewName) => void
+  /** Frame all bodies without changing the view direction ("Zoom vše"). */
+  zoomAll: () => void
+}
+
+// Direction from the target towards the camera for each standard view. The
+// viewport camera is Y-up and a ring lies in the XY plane with the finger
+// axis along Z, so "front" looks through the finger hole (as in 3Design) and
+// "top" looks down onto the head. The tiny Z offset on top/bottom keeps
+// OrbitControls away from its degenerate straight-along-up pose.
+const VIEW_DIRS: Record<ViewName, [number, number, number]> = {
+  iso:    [1, 0.75, 1],
+  front:  [0, 0, 1],
+  back:   [0, 0, -1],
+  left:   [-1, 0, 0],
+  right:  [1, 0, 0],
+  top:    [0, 1, 0.002],
+  bottom: [0, -1, 0.002],
 }
 
 const BG_COLOR = VIEWPORT_BG
@@ -123,7 +145,11 @@ const FeatureRenderer = forwardRef<FeatureRendererHandle, FeatureRendererProps>(
   const onPushPullPreviewRef = useRef(onPushPullPreview)
   const nodeMapRef = useRef(nodeMap)
 
-  useEffect(() => { pickModeRef.current = pickMode }, [pickMode])
+  useEffect(() => {
+    pickModeRef.current = pickMode
+    const eg = stateRef.current?.edgeGroup
+    if (eg) for (const l of eg.children) if (l.userData?.jewelryPBR) l.visible = pickMode === 'edge'
+  }, [pickMode])
   useEffect(() => { selectionRef.current = selection }, [selection])
   useEffect(() => { meshesRef.current = meshes }, [meshes])
   useEffect(() => { onSelectionChangeRef.current = onSelectionChange }, [onSelectionChange])
@@ -141,6 +167,10 @@ const FeatureRenderer = forwardRef<FeatureRendererHandle, FeatureRendererProps>(
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true })
     renderer.setPixelRatio(window.devicePixelRatio || 1)
     renderer.setClearColor(BG_COLOR, 1)
+    // Filmic tone mapping keeps polished gold from clipping to flat yellow
+    // under the studio environment.
+    renderer.toneMapping = THREE.ACESFilmicToneMapping
+    renderer.toneMappingExposure = 1.15
     mount.appendChild(renderer.domElement)
     renderer.domElement.style.display = 'block'
     renderer.domElement.style.width = '100%'
@@ -165,7 +195,9 @@ const FeatureRenderer = forwardRef<FeatureRendererHandle, FeatureRendererProps>(
     key.position.set(60, 90, 40)
     const fill = new THREE.DirectionalLight(0x99ccff, 0.3)
     fill.position.set(-50, 30, -60)
-    scene.add(ambient, key, fill)
+    // Sky/ground fill so polished metal never goes black in shadowed areas.
+    const hemi = new THREE.HemisphereLight(0xdfe9ff, 0x3a2a14, 0.9)
+    scene.add(ambient, key, fill, hemi)
 
     // Studio environment map for PBR metal/gem reflections.
     // Built from a simple neutral-grey CubeRenderTarget (no external assets).
@@ -561,8 +593,13 @@ const FeatureRenderer = forwardRef<FeatureRendererHandle, FeatureRendererProps>(
       if (jewelryParams && jewelryParams.kind === 'metal') {
         mat = new THREE.MeshPhysicalMaterial({
           color: jewelryParams.color,
-          metalness: jewelryParams.metalness,
-          roughness: jewelryParams.roughness,
+          // A touch of diffuse + a slightly wider highlight keeps metal
+          // readable from the direct lights even where the environment map is
+          // weak (or unavailable on software-rendered WebGL).
+          metalness: Math.min(jewelryParams.metalness, 0.88),
+          roughness: Math.max(jewelryParams.roughness, 0.16),
+          clearcoat: 0.6,
+          clearcoatRoughness: 0.08,
           envMapIntensity: jewelryParams.envMapIntensity,
           flatShading: false,
         })
@@ -595,7 +632,18 @@ const FeatureRenderer = forwardRef<FeatureRendererHandle, FeatureRendererProps>(
           emissive: 0x000000,
         })
       }
-      const mesh = new THREE.Mesh(geom, mat)
+      // Metal and gems: smooth shading across curved faces (creased at 35°)
+      // instead of the flat per-triangle normals used for mechanical parts.
+      let drawGeom = geom
+      if (jewelryParams) {
+        try {
+          drawGeom = toCreasedNormals(geom, (35 * Math.PI) / 180)
+          drawGeom.computeBoundingBox()
+          drawGeom.computeBoundingSphere()
+          if (drawGeom !== geom) geom.dispose()
+        } catch { drawGeom = geom }
+      }
+      const mesh = new THREE.Mesh(drawGeom, mat)
       mesh.userData.partId = part.id
       mesh.userData.kind = 'feature-face'
       // Store whether this mesh uses jewelry PBR so repaint helpers skip it.
@@ -629,6 +677,10 @@ const FeatureRenderer = forwardRef<FeatureRendererHandle, FeatureRendererProps>(
         edgeLine.userData.partId = part.id
         edgeLine.userData.kind = 'feature-edge'
         edgeLine.renderOrder = 5
+        // Polished metal / gems read like 3Design without the B-rep edge
+        // wireframe; edges only appear while picking edges.
+        edgeLine.userData.jewelryPBR = jewelryParams !== null
+        edgeLine.visible = jewelryParams === null || pickModeRef.current === 'edge'
         edgeGroup.add(edgeLine)
       }
 
@@ -656,7 +708,7 @@ const FeatureRenderer = forwardRef<FeatureRendererHandle, FeatureRendererProps>(
       const size = new THREE.Vector3()
       bounds.getSize(size)
       const radius = Math.max(size.x, size.y, size.z) || 50
-      const dist = radius * 2.2 + 30
+      const dist = radius * 1.9 + 4
       camera.position.set(center.x + dist, center.y + dist, center.z + dist * 0.8)
       camera.near = Math.max(0.1, radius / 100)
       camera.far = Math.max(2000, radius * 50)
@@ -679,9 +731,35 @@ const FeatureRenderer = forwardRef<FeatureRendererHandle, FeatureRendererProps>(
     repaintSelection(s, selection)
   }, [selection])
 
-  useImperativeHandle(ref, () => ({
-    snapshot: () => stateRef.current?.renderer?.domElement?.toDataURL?.('image/png'),
-  }), [])
+  useImperativeHandle(ref, () => {
+    function frame(dir: [number, number, number] | null) {
+      const s = stateRef.current
+      if (!s) return
+      const { camera, controls, meshGroup } = s
+      const box = new THREE.Box3()
+      if (meshGroup && meshGroup.children.length) box.setFromObject(meshGroup)
+      const center = new THREE.Vector3()
+      const size = new THREE.Vector3()
+      if (box.isEmpty()) { center.set(0, 0, 0); size.set(40, 40, 40) } else { box.getCenter(center); box.getSize(size) }
+      const radius = Math.max(size.length() / 2, 1)
+      const fov = (camera.fov * Math.PI) / 180
+      const dist = (radius / Math.sin(fov / 2)) * 1.15
+      const d = dir
+        ? new THREE.Vector3(...dir).normalize()
+        : camera.position.clone().sub(controls.target).normalize()
+      camera.position.copy(center.clone().add(d.multiplyScalar(dist)))
+      camera.near = Math.max(0.01, dist / 1000)
+      camera.far = Math.max(2000, dist * 50)
+      camera.updateProjectionMatrix()
+      controls.target.copy(center)
+      controls.update()
+    }
+    return {
+      snapshot: () => stateRef.current?.renderer?.domElement?.toDataURL?.('image/png'),
+      setView: (view: ViewName) => frame(VIEW_DIRS[view] || VIEW_DIRS.iso),
+      zoomAll: () => frame(null),
+    }
+  }, [])
 
   // T-C4: WebGL fallback panel.
   if (webGLUnavailable) {

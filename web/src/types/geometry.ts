@@ -739,7 +739,15 @@ export interface ToSolidFeatureNode extends FeatureNodeBase {
   opts?: Record<string, unknown>
 }
 
+/** 3Design-style basic solids (sphere/torus/cylinder/cone/box/tube). */
+export interface PrimitiveFeatureNode extends FeatureNodeBase {
+  op: 'primitive'
+  shape?: 'sphere' | 'torus' | 'cylinder' | 'cone' | 'box' | 'tube'
+  [param: string]: unknown
+}
+
 export type FeatureNode =
+  | PrimitiveFeatureNode
   | PadFeatureNode
   | BossWithDraftFeatureNode
   | PocketFeatureNode

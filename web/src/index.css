@@ -175,3 +175,22 @@ body {
     animation: none !important;
   }
 }
+
+/* Goldsmith feature workspace: Strom/Vlastnosti | viewport | Nástroje/Nápověda */
+.zl-feature-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+@media (min-width: 768px) {
+  .zl-feature-grid { grid-template-columns: 250px minmax(0, 1fr); }
+}
+@media (min-width: 1024px) {
+  .zl-feature-grid { grid-template-columns: 260px minmax(0, 1fr) 290px; }
+}
+@media (min-width: 1800px) {
+  .zl-feature-grid { grid-template-columns: 300px minmax(0, 1fr) 320px; }
+}
+@media (min-width: 1024px) {
+  .kerf-editor-grid.zl-files-collapsed { grid-template-columns: 34px 1fr; }
+}

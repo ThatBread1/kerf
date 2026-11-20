@@ -217,12 +217,13 @@ const NORMALISERS: Record<string, (n: Node) => Node> = {
 
 /** Return a copy of `node` with worker geometry fields derived from the
  *  designer-facing parameters. Unknown ops are returned unchanged. */
-export function normalizeJewelryNode<T extends Node>(node: T): T {
-  const fn = node && typeof node.op === 'string' ? NORMALISERS[node.op] : undefined
-  if (!fn) return node
+export function normalizeJewelryNode<T extends object>(node: T): T & Node {
+  const n = node as unknown as Node
+  const fn = n && typeof n.op === 'string' ? NORMALISERS[n.op] : undefined
+  if (!fn) return node as T & Node
   try {
-    return fn(node) as T
+    return fn(n) as T & Node
   } catch {
-    return node
+    return node as T & Node
   }
 }
