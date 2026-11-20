@@ -52,7 +52,11 @@ import { opLabel, fieldLabel, optionLabel, opHint } from '../lib/zlatnik/cs'
 import { liveBodies, type ToolDef } from '../lib/zlatnik/tools'
 import { metalVolume, metalWeight, formatGrams, METAL_SHORT, bodyToGeometry, isGemBody } from '../lib/zlatnik/meshInfo'
 import { exportParts, downloadBlob, sanitizeFilename } from '../lib/exporters.js'
-import { Check, Undo2, Redo2, HelpCircle, Focus, FileDown, Scale } from 'lucide-react'
+import { Check, Undo2, Redo2, HelpCircle, Focus, FileDown, Scale, FolderOpen } from 'lucide-react'
+import { VtfModelInspector } from './zlatnik/VtfModelInspector'
+import { parseVtf } from '../lib/zlatnik/vtf'
+import { packParts, partToMesh, loadPackedParts, primePackedParts, type StoredPart, type VtfModelNode } from '../lib/zlatnik/vtfStore'
+import { api } from '../lib/api'
 import {
   runFeatures, prewarmOcct, newFeatureId,
   requestFaceOutline,
@@ -5848,6 +5852,16 @@ export default function FeatureView({
   const debounceRef = useRef(null)
   const seqRef = useRef(0)
 
+  const projectId = useWorkspace((s) => s.projectId) as string | null
+  const loadVtfParts = useCallback((node: VtfModelNode): Promise<StoredPart[]> => {
+    if (!node.mesh_file_id) return Promise.reject(new Error('chybí uložená data modelu'))
+    return loadPackedParts(node.mesh_file_id, async () => {
+      if (!projectId) throw new Error('projekt není otevřený')
+      const f = await api.getFile(projectId, node.mesh_file_id)
+      return String(f?.content || '')
+    })
+  }, [projectId])
+
   const triggerEvaluate = useCallback(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
     const seq = ++seqRef.current
@@ -5899,28 +5913,42 @@ export default function FeatureView({
       }
       setEvalState((s) => ({ ...s, loading: true, error: null }))
       const t0 = performance.now()
+      // Models imported from 3Design are ready-made meshes: they skip the
+      // OCCT worker and are appended after the evaluated B-rep bodies.
+      const vtfMeshes: { id: string; mesh: ReturnType<typeof partToMesh> }[] = []
+      let vtfError: string | null = null
+      for (const n of tree) {
+        if (n.suppressed || n.op !== 'vtf_model') continue
+        const node = n as unknown as VtfModelNode
+        try {
+          const parts = await loadVtfParts(node)
+          const vis = new Set(node.visible_parts || [])
+          for (const p of parts) if (vis.has(p.oid)) { const m = partToMesh(node, p); vtfMeshes.push({ id: m.id, mesh: m }) }
+        } catch (err) {
+          vtfError = `Model ze 3Designu se nenačetl: ${(err as Error)?.message || err}`
+        }
+      }
       // Suppressed nodes ("vypnout" in the tree) are skipped entirely.
-      const result = await runFeatures(tree.filter((n) => !n.suppressed), sketches)
+      const occtTree = tree.filter((n) => !n.suppressed && n.op !== 'vtf_model')
+      const result = occtTree.length ? await runFeatures(occtTree, sketches) : { meshes: [] }
       const ms = Math.round(performance.now() - t0)
       if (seq !== seqRef.current) return
       if ('stale' in result) return
       if ('error' in result) {
         setEvalState({ loading: false, error: result.error, ms })
-        if (result.partial) {
-          const fallback = [{ id: 'partial', mesh: result.partial }]
-          setMeshes(fallback)
-        }
+        const fallback = result.partial ? [{ id: 'partial', mesh: result.partial }] : []
+        if (fallback.length || vtfMeshes.length) setMeshes([...fallback, ...vtfMeshes])
         return
       }
-      const next = (result.meshes || []).map((m, i) => ({
+      const next = [...(result.meshes || []).map((m, i) => ({
         id: m.id || `body-${i}`,
         mesh: m,
-      }))
+      })), ...vtfMeshes]
       lastGoodMeshesRef.current = next
       setMeshes(next)
-      setEvalState({ loading: false, error: null, ms })
+      setEvalState({ loading: false, error: vtfError, ms })
     }, DEBOUNCE_MS)
-  }, [tree, loadSketchContent])
+  }, [tree, loadSketchContent, loadVtfParts])
 
   useEffect(() => { prewarmOcct() }, [])
 
@@ -6187,6 +6215,41 @@ export default function FeatureView({
     }
   }, [meshes, metal, fileName, projectName])
 
+  // ---- Open a 3Design document (.vtf) ----
+  const vtfInputRef = useRef<HTMLInputElement | null>(null)
+  const [vtfBusy, setVtfBusy] = useState<string | null>(null)
+  const importVtf = useCallback(async (file: File) => {
+    setExportError(null)
+    if (!projectId) { setExportError('Nejdřív otevřete projekt.'); return }
+    const base = file.name.replace(/\.vtf$/i, '')
+    setVtfBusy(`Načítám ${file.name}…`)
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer())
+      const doc = parseVtf(bytes)
+      if (!doc.parts.length) {
+        setExportError(`V souboru „${file.name}“ nejsou uložená žádná tělesa (3Design je do něj neuložil). Otevřete ho ve 3Designu, uložte znovu a zkuste to ještě jednou.`)
+        return
+      }
+      setVtfBusy(`Ukládám ${doc.parts.length} částí…`)
+      const content = packParts(doc.parts)
+      const row = await api.createFile(projectId, { name: `${base}.vtf-sit`, kind: 'file', parent_id: null, content })
+      primePackedParts(row.id, doc.parts)
+      try { useWorkspace.setState({ files: await api.listFiles(projectId) } as never) } catch { /* tolerate */ }
+      const id = newFeatureId('vtf_model')
+      const node: VtfModelNode = {
+        id, op: 'vtf_model', name: base, source_name: file.name, mesh_file_id: row.id,
+        visible_parts: doc.parts.filter((p) => p.defaultVisible).map((p) => p.oid),
+      }
+      updateTree((arr) => [...arr, node])
+      setSelectedId(id)
+      setTimeout(() => rendererRef.current?.zoomAll(), 900)
+    } catch (err) {
+      setExportError(`Soubor „${file.name}“ se nepodařilo načíst: ${(err as Error)?.message || err}`)
+    } finally {
+      setVtfBusy(null)
+    }
+  }, [projectId, updateTree])
+
   // ---- Derived UI state ----
   const sketchFiles = useMemo(() => {
     return (files || []).filter((f) => {
@@ -6235,7 +6298,14 @@ export default function FeatureView({
     : selectedFeature
       ? opHint(selectedFeature.op, KIND_BY_OP[selectedFeature.op]?.caption)
       : ''
-  const inspector = selectedFeature ? (
+  const inspector = selectedFeature && selectedFeature.op === 'vtf_model' ? (
+    <VtfModelInspector
+      node={selectedFeature as unknown as VtfModelNode}
+      loadParts={loadVtfParts}
+      onPatch={(patch) => patchFeature(selectedFeature.id, patch)}
+      onDelete={() => removeFeature(selectedFeature.id)}
+    />
+  ) : selectedFeature ? (
     <FeatureInspector
       feature={selectedFeature}
       tree={tree}
@@ -6307,6 +6377,26 @@ export default function FeatureView({
         >
           <Focus size={17} aria-hidden="true" />
         </button>
+        <button
+          type="button"
+          onClick={() => vtfInputRef.current?.click()}
+          disabled={!!vtfBusy}
+          title="Otevřít soubor 3Designu (.vtf)"
+          aria-label="Otevřít soubor 3Designu (.vtf)"
+          data-testid="zl-open-vtf"
+          className="m3-btn m3-btn-tonal h-10 inline-flex items-center gap-2 pl-3.5 pr-4 text-[13.5px] font-semibold flex-shrink-0 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-m3-primary)]"
+        >
+          <FolderOpen size={17} aria-hidden="true" />
+          <span className="hidden xl:inline whitespace-nowrap">Otevřít .vtf</span>
+        </button>
+        <input
+          ref={vtfInputRef}
+          type="file"
+          accept=".vtf"
+          className="hidden"
+          data-testid="zl-open-vtf-input"
+          onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void importVtf(f) }}
+        />
         <div className="relative flex-shrink-0" ref={exportRef}>
           <button
             type="button"
@@ -6424,7 +6514,14 @@ export default function FeatureView({
         </aside>
 
         {/* Centre: viewport */}
-        <main className="relative min-h-0 min-w-0 h-full rounded-[var(--m3-shape-xl)] overflow-hidden">
+        <main
+          className="relative min-h-0 min-w-0 h-full rounded-[var(--m3-shape-xl)] overflow-hidden"
+          onDragOver={(e) => { if (Array.from(e.dataTransfer?.items || []).some((i) => i.kind === 'file')) e.preventDefault() }}
+          onDrop={(e) => {
+            const f = Array.from(e.dataTransfer?.files || []).find((x) => /\.vtf$/i.test(x.name))
+            if (f) { e.preventDefault(); void importVtf(f) }
+          }}
+        >
           <FeatureRenderer
             ref={rendererRef}
             meshes={meshes}
@@ -6440,6 +6537,12 @@ export default function FeatureView({
             onPushPullCommit={onPushPullCommit}
             className="w-full h-full"
           />
+          {vtfBusy && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 inline-flex items-center gap-2 px-4 h-9 rounded-full bg-[var(--color-m3-tertiary)] text-[12.5px] font-semibold text-[#001a43] shadow-lg shadow-black/30" role="status">
+              <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+              <span>{vtfBusy}</span>
+            </div>
+          )}
           {evalState.loading && (
             <div className="absolute top-4 left-4 inline-flex items-center gap-2 px-4 h-9 rounded-full bg-[var(--color-m3-surface-container-high)]/90 backdrop-blur text-[12.5px] font-medium text-[var(--color-m3-on-surface)] shadow-lg shadow-black/30">
               <Loader2 size={14} className="animate-spin text-[var(--color-m3-primary)]" aria-hidden="true" />
@@ -6451,7 +6554,7 @@ export default function FeatureView({
               <div className="max-w-sm text-center px-7 py-6 rounded-[var(--m3-shape-xl)] bg-[var(--color-m3-surface-container)]/85 backdrop-blur-sm shadow-xl shadow-black/30">
                 <div className="text-[22px] font-bold text-[var(--color-m3-on-surface)]" style={{ fontStretch: '108%' }}>Prázdný model</div>
                 <div className="mt-2 text-[14px] text-[var(--color-m3-on-surface-variant)] leading-relaxed">
-                  Začněte v panelu <span className="text-kerf-200">Nástroje</span> — např. <span className="text-kerf-200">Prsteny → Solitér</span> vytvoří hotový prsten s kamenem.
+                  Začněte v panelu <span className="text-kerf-200">Nástroje</span> — např. <span className="text-kerf-200">Prsteny → Solitér</span> vytvoří hotový prsten s kamenem. Model ze 3Designu otevřete tlačítkem <span className="text-kerf-200">Otevřít .vtf</span> nebo přetažením souboru sem.
                 </div>
               </div>
             </div>

@@ -1,3 +1,5 @@
 
 # Windows batch files must keep CRLF line endings (cmd.exe goto/labels misbehave with LF)
 *.bat text eol=crlf
+*.cmd text eol=crlf
+*.ico binary

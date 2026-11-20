@@ -9,6 +9,7 @@ export const OP_LABELS: Record<string, string> = {
   ring_shank: 'Obroučka',
   bangle: 'Náramek',
   gemstone: 'Kámen',
+  vtf_model: 'Model ze 3Designu',
   gem_seat: 'Lůžko kamene',
   bezel_seat: 'Lůžko do kastlíku',
   fishtail_seat: 'Rybinové lůžko',
@@ -50,6 +51,7 @@ export const OP_HINTS: Record<string, string> = {
   ring_shank: 'Obroučka prstenu podle velikosti. CZ/EU velikost = vnitřní obvod v mm (např. 54). Prst prochází osou Z, vrchol prstenu je nahoře (+Y).',
   bangle: 'Pevný nebo otevřený náramek podle obvodu zápěstí.',
   gemstone: 'Broušený kámen. Materiál (diamant, rubín, safír, smaragd) určuje barvu v náhledu.',
+  vtf_model: 'Model načtený ze souboru 3Designu (.vtf). Ve Vlastnostech zapnete nebo vypnete jednotlivé části. Model jde vážit a exportovat, ale neupravuje se (tvar je uložený jako síť).',
   gem_seat: 'Fréza pro usazení kamene. Odečtěte ji od kovu Booleovskou operací (Odečíst).',
   bezel_seat: 'Vnitřní nosná hrana pro kastlík / korunku.',
   fishtail_seat: 'Lůžko s rybinovým (bright-cut) výbrusem pro drobné kameny.',
@@ -286,7 +288,8 @@ const BOOLEAN_NAMES: Record<string, string> = { cut: 'Odečtení', fuse: 'Sjedno
 const SOLID_NAMES: Record<string, string> = { sphere: 'Koule', torus: 'Torus', cylinder: 'Válec', cone: 'Kužel', box: 'Kvádr', tube: 'Trubka' }
 
 /** Tree label: booleans and solids say what they are ("Odečtení", "Koule"). */
-export function nodeLabel(node: { op: string; kind?: unknown; shape?: unknown }, fallback?: string): string {
+export function nodeLabel(node: { op: string; kind?: unknown; shape?: unknown; name?: unknown }, fallback?: string): string {
+  if (node.op === 'vtf_model') return `3Design: ${String(node.name || 'model')}`
   if (node.op === 'boolean') return BOOLEAN_NAMES[String(node.kind || 'cut')] || opLabel('boolean', fallback)
   if (node.op === 'primitive') return SOLID_NAMES[String(node.shape || 'sphere')] || opLabel('primitive', fallback)
   return opLabel(node.op, fallback)

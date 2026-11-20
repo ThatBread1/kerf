@@ -79,6 +79,9 @@ export function liveBodies(tree: ToolNode[]): ToolNode[] {
   const live: ToolNode[] = []
   for (const n of tree) {
     if (n.suppressed) continue
+    // Imported 3Design meshes are shown and exported but are not B-rep
+    // bodies, so modify tools (booleans, seats) cannot target them.
+    if (n.op === 'vtf_model') continue
     if (n.op === 'boolean') {
       for (let i = live.length - 1; i >= 0; i--) {
         if (live[i].id === n.target_a_id || live[i].id === n.target_b_id) live.splice(i, 1)

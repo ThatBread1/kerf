@@ -65,10 +65,15 @@ if not "%BUILT%"=="%HEAD%" (
   echo [3/4] Webove rozhrani je aktualni.
 )
 
+curl -s -o nul "http://localhost:%PORT%" && (
+  echo Kerf uz bezi - oteviram okno.
+  call "%ROOT%\scripts\zlatnik\otevrit-okno.cmd" %PORT%
+  exit /b 0
+)
 echo [4/4] Pripravuji databazi a spoustim server na http://localhost:%PORT% ...
 "%PY%" -m kerf_core.db.migrations.runner || goto :fail
 set "KERF_FRONTEND_DIST=%ROOT%\web\dist"
-start "" "http://localhost:%PORT%"
+start "" /min "%ROOT%\scripts\zlatnik\otevrit-okno.cmd" %PORT%
 "%ROOT%\.venv\Scripts\kerf-server.exe" --host 127.0.0.1 --port %PORT%
 goto :eof
 
