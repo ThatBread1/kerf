@@ -200,8 +200,8 @@ describe('FeatureInspector — trim_by_curve node renders param labels', () => {
 
   it('chip for trim_by_curve node is present in the timeline (aria-label)', () => {
     const html = renderInspector(trimNode)
-    // The chip renders aria-label="TrimByCurve, feature 1" — not the raw id.
-    expect(html).toMatch(/TrimByCurve.*feature 1|aria-label="TrimByCurve/)
+    // The tree item renders aria-label="TrimByCurve, prvek 1" — not the raw id.
+    expect(html).toMatch(/TrimByCurve.*prvek 1|aria-label="TrimByCurve/)
   })
 
   it('TrimByCurve label is present', () => {

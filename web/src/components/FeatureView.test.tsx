@@ -94,20 +94,20 @@ function render(props = {}) {
 // 1. Feature timeline — role="tree" container
 // ---------------------------------------------------------------------------
 
-describe('FeatureView — timeline role="tree"', () => {
+describe('FeatureView — feature tree ("Strom") role="tree"', () => {
   it('renders a role="tree" container', () => {
-    const html = render()
+    const html = render({ parsedFeature: makeTree(1) })
     expect(html).toMatch(/role="tree"/)
   })
 
-  it('has aria-label="Feature timeline"', () => {
-    const html = render()
-    expect(html).toMatch(/aria-label="Feature timeline"/)
+  it('has aria-label="Strom prvků"', () => {
+    const html = render({ parsedFeature: makeTree(1) })
+    expect(html).toMatch(/aria-label="Strom prvků"/)
   })
 
   it('shows empty-state message when tree is empty', () => {
     const html = render({ parsedFeature: makeTree(0) })
-    expect(html).toContain('No features yet')
+    expect(html).toContain('Zatím prázdné')
   })
 })
 
@@ -115,7 +115,7 @@ describe('FeatureView — timeline role="tree"', () => {
 // 2. FeatureTimelineChip — roving tabIndex
 // ---------------------------------------------------------------------------
 
-describe('FeatureView — roving tabIndex on chips', () => {
+describe('FeatureView — roving tabIndex on tree items', () => {
   it('renders role="treeitem" for each chip', () => {
     const html = render({ parsedFeature: makeTree(3) })
     const matches = (html.match(/role="treeitem"/g) || []).length
@@ -125,22 +125,22 @@ describe('FeatureView — roving tabIndex on chips', () => {
   it('first chip button has tabindex="0" (roving tabindex default)', () => {
     const html = render({ parsedFeature: makeTree(3) })
     // React serialises JSX `tabIndex` prop as lowercase `tabindex` in HTML.
-    const zeroCount = (html.match(/data-chip-btn="" tabindex="0"/g) || []).length
-    const negCount  = (html.match(/data-chip-btn="" tabindex="-1"/g) || []).length
+    const zeroCount = (html.match(/data-tree-btn="" tabindex="0"/g) || []).length
+    const negCount  = (html.match(/data-tree-btn="" tabindex="-1"/g) || []).length
     // Exactly one chip has tabindex=0 (the roving focus owner).
     expect(zeroCount).toBe(1)
     // The other two chips have tabindex=-1.
     expect(negCount).toBe(2)
   })
 
-  it('data-chip-btn attribute is present on chip buttons', () => {
+  it('data-tree-btn attribute is present on tree item buttons', () => {
     const html = render({ parsedFeature: makeTree(2) })
-    expect(html).toContain('data-chip-btn=""')
+    expect(html).toContain('data-tree-btn=""')
   })
 
   it('single chip has tabindex="0" (only one chip → it owns focus)', () => {
     const html = render({ parsedFeature: makeTree(1) })
-    expect(html).toContain('data-chip-btn="" tabindex="0"')
+    expect(html).toContain('data-tree-btn="" tabindex="0"')
   })
 })
 
@@ -165,7 +165,7 @@ describe('FeatureView — chip ARIA attributes', () => {
 
   it('chip button has aria-label containing feature index', () => {
     const html = render({ parsedFeature: makeTree(1) })
-    expect(html).toMatch(/aria-label="[^"]*feature 1[^"]*"/)
+    expect(html).toMatch(/aria-label="[^"]*prvek 1[^"]*"/)
   })
 
   it('aria-level="1" on all treeitems (flat timeline)', () => {

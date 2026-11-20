@@ -10,7 +10,7 @@
 //      element" violation eliminated).
 //   2. The mobile handle that closes the inspector is a <button> element.
 //   3. The mobile handle carries type="button" (prevents accidental form submit).
-//   4. The mobile handle retains aria-label="Close inspector".
+//   4. The mobile handle retains aria-label="Zavřít vlastnosti".
 //   5. FeatureView has a default export (module shape sanity-check).
 
 import { describe, it, expect } from 'vitest'
@@ -41,7 +41,7 @@ describe('FeatureView T-D2 a11y — no role=button divs', () => {
     // The Close inspector control must be a <button>.  Attributes may span
     // multiple lines, so we check that </button> follows the aria-label rather
     // than </div> or </span>.
-    const closeIdx = src.indexOf('aria-label="Close inspector"')
+    const closeIdx = src.indexOf('aria-label="Zavřít vlastnosti"')
     expect(closeIdx).toBeGreaterThan(-1)
     // Walk backward from the aria-label to find the opening tag
     const before = src.slice(0, closeIdx)
@@ -52,7 +52,7 @@ describe('FeatureView T-D2 a11y — no role=button divs', () => {
 
   it('mobile inspector handle has type="button"', () => {
     // Find the block from <button opening to the matching > and confirm type="button"
-    const closeIdx = src.indexOf('aria-label="Close inspector"')
+    const closeIdx = src.indexOf('aria-label="Zavřít vlastnosti"')
     const before = src.slice(0, closeIdx)
     const openPos = before.lastIndexOf('<button')
     const closeTagEnd = src.indexOf('>', closeIdx)
@@ -60,8 +60,8 @@ describe('FeatureView T-D2 a11y — no role=button divs', () => {
     expect(tagText).toContain('type="button"')
   })
 
-  it('mobile inspector handle retains aria-label="Close inspector"', () => {
-    expect(src).toContain('aria-label="Close inspector"')
+  it('mobile inspector handle retains aria-label="Zavřít vlastnosti"', () => {
+    expect(src).toContain('aria-label="Zavřít vlastnosti"')
   })
 
   it('FeatureView has a default export', () => {

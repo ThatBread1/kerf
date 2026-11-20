@@ -44,7 +44,7 @@
 //     from the OCCT face frame.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Trash2, ChevronUp, ChevronDown, Box, Circle, RotateCcw, Disc, Layers, Drill, Sigma, AlertTriangle, Loader2, Play, Move, Crosshair, GitBranch, Repeat, FlipHorizontal, PencilLine, Pointer, Waves, Layers3, Aperture, Plus, X, ChevronRight, LayoutGrid, Combine, Scissors, Grid3x3, MoreHorizontal, SlidersHorizontal, Zap, Eye, Shield, Wrench, AlignLeft, Activity, Code, Settings, Cpu, BarChart2, RefreshCw, Droplets, Wind, Gauge, Spline, TrendingUp, Maximize2, Wand2, GitMerge, SplitSquareHorizontal, Route, Ruler, ArrowUpDown, Workflow, Shuffle, Merge, Cuboid, Navigation, Share2, PackageOpen, BrainCircuit, Compass, Ungroup, Boxes, Pencil, PenLine, Eraser, ScanLine, Scan, FileSearch, FileOutput, Network, Component, LayoutDashboard, AlignCenter, ScanSearch, Sticker, FileText, LayoutTemplate } from 'lucide-react'
+import { Trash2, ChevronUp, ChevronDown, Box, Circle, RotateCcw, Disc, Layers, Drill, Sigma, AlertTriangle, Loader2, Play, Move, Crosshair, GitBranch, Repeat, FlipHorizontal, Pointer, Waves, Layers3, Aperture, Plus, X, LayoutGrid, Combine, Scissors, Grid3x3, SlidersHorizontal, Zap, Eye, Shield, Wrench, AlignLeft, Activity, Code, Settings, Cpu, BarChart2, RefreshCw, Droplets, Wind, Gauge, Spline, TrendingUp, Maximize2, Wand2, GitMerge, SplitSquareHorizontal, Route, Ruler, ArrowUpDown, Workflow, Shuffle, Merge, Cuboid, Navigation, Share2, PackageOpen, BrainCircuit, Compass, Ungroup, Boxes, Pencil, PenLine, Eraser, ScanLine, Scan, FileSearch, FileOutput, Network, Component, LayoutDashboard, AlignCenter, ScanSearch, Sticker, FileText, LayoutTemplate } from 'lucide-react'
 import FeatureRenderer from './FeatureRenderer.jsx'
 import type { FeatureRendererHandle, ViewName } from './FeatureRenderer'
 import { ZlPanel, ZlIconButton, FeatureTreePanel, ToolPalette, PlacementSection } from './zlatnik/ZlPanels'
@@ -5778,21 +5778,6 @@ function useClickOutside(ref, onOutside, enabled) {
 // Long-press hook for touch devices. Returns pointer-event handlers that
 // fire `onLongPress` after `delay` ms of continuous contact. Cancels on
 // move or early release.
-function useLongPress(onLongPress, delay = 500) {
-  const timerRef = useRef(null)
-  const cancel = useCallback(() => {
-    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null }
-  }, [])
-  const onPointerDown = useCallback((e) => {
-    if (e.pointerType !== 'touch') return
-    timerRef.current = setTimeout(() => { onLongPress(e) }, delay)
-  }, [onLongPress, delay])
-  const onPointerUp = cancel
-  const onPointerCancel = cancel
-  const onPointerMove = cancel
-  useEffect(() => cancel, [cancel])
-  return { onPointerDown, onPointerUp, onPointerCancel, onPointerMove }
-}
 // ---------------------------------------------------------------------------
 // Component.
 
@@ -5833,42 +5818,6 @@ export default function FeatureView({
       setSelectedId(tree[tree.length - 1]?.id)
     }
   }, [tree, selectedId])
-
-  // Roving-tabindex index for the feature timeline (keyboard nav).
-  // Points to the chip that currently owns tabIndex=0. Defaults to the last
-  // chip (same as selectedId initialisation above). Clamped on tree change.
-  const [rovingIdx, setRovingIdx] = useState(0)
-  useEffect(() => {
-    if (tree.length === 0) return
-    setRovingIdx((prev) => Math.min(prev, tree.length - 1))
-  }, [tree.length])
-
-  // Ref to the timeline container so we can focus individual chips.
-  const timelineRef = useRef(null)
-
-  const handleTimelineKeyDown = useCallback((e) => {
-    if (tree.length === 0) return
-    let next = rovingIdx
-    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-      e.preventDefault()
-      next = Math.min(rovingIdx + 1, tree.length - 1)
-    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-      e.preventDefault()
-      next = Math.max(rovingIdx - 1, 0)
-    } else if (e.key === 'Home') {
-      e.preventDefault()
-      next = 0
-    } else if (e.key === 'End') {
-      e.preventDefault()
-      next = tree.length - 1
-    } else {
-      return
-    }
-    setRovingIdx(next)
-    // Move DOM focus to the newly-roving chip button.
-    const chipBtns = timelineRef.current?.querySelectorAll('[data-chip-btn]')
-    if (chipBtns?.[next]) chipBtns[next].focus()
-  }, [rovingIdx, tree.length])
 
   // Cached evaluation results — survive across debounced re-runs so a brief
   // error doesn't wipe the viewport.
@@ -6671,103 +6620,6 @@ function ToolsDrawer({ children }: { children: React.ReactNode }) {
       {open && (
         <div className="absolute top-2 right-2 bottom-14 z-20 w-[290px] max-w-[85%] zl-panel rounded-xl border border-ink-600 shadow-2xl shadow-black/60 overflow-y-auto" onClick={(e) => { if ((e.target as HTMLElement).closest('[data-testid^="zl-tool-"]')) setOpen(false) }}>
           {children}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// FeatureTimelineChip — a single chip in the horizontal timeline. Handles
-// pointer-unified interactions:
-//   - pointer (mouse/stylus): hover shows X delete button; right-click deletes.
-//   - touch: long-press opens a small dot-menu (⋯) popover with Delete.
-//   - keyboard: Enter/Space selects; Delete key deletes.
-
-function FeatureTimelineChip({ node, kind, Icon, idx, isSel, rovingTabIndex = 0, onSelect, onDelete }) {
-  const [dotMenuOpen, setDotMenuOpen] = useState(false)
-  const wrapRef = useRef(null)
-  useClickOutside(wrapRef, () => setDotMenuOpen(false), dotMenuOpen)
-  const longPress = useLongPress(useCallback(() => setDotMenuOpen(true), []))
-
-  const label = kind?.label || node.op
-
-  function handleKeyDown(e) {
-    // Enter/Space selects. Delete removes. Arrow keys bubble up to the
-    // tree container's roving-tabindex handler.
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect() }
-    if (e.key === 'Delete') onDelete()
-  }
-
-  return (
-    <div ref={wrapRef} role="treeitem" aria-selected={isSel} aria-level={1} className="flex items-center gap-1 flex-shrink-0 relative">
-      {idx > 0 && <ChevronRight size={11} className="text-ink-600" aria-hidden="true" />}
-      <button
-        type="button"
-        data-chip-btn=""
-        tabIndex={rovingTabIndex}
-        onClick={onSelect}
-        onKeyDown={handleKeyDown}
-        onContextMenu={(ev) => { ev.preventDefault(); onDelete() }}
-        {...longPress}
-        aria-label={`${label}, feature ${idx + 1}${isSel ? ', selected' : ''}`}
-        className={`group relative inline-flex items-center gap-1.5 pl-1.5 pr-2 py-1 rounded-md border text-xs transition-colors
-          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kerf-300/60
-          ${isSel
-            ? 'border-kerf-300/60 bg-kerf-300/10 text-kerf-100 shadow-[0_0_0_1px_rgba(255,214,51,0.15)]'
-            : 'border-ink-800 bg-ink-850 text-ink-200 hover:border-ink-600 hover:bg-ink-800'}`}
-        title={`${label} · right-click or long-press to delete`}
-      >
-        <span
-          aria-hidden="true"
-          className={`inline-flex items-center justify-center w-4 h-4 rounded text-[10px] font-mono leading-none flex-shrink-0
-            ${isSel ? 'bg-kerf-300/30 text-kerf-100' : 'bg-ink-800 text-ink-400'}`}
-        >
-          {idx + 1}
-        </span>
-        <Icon size={12} aria-hidden="true" className={isSel ? 'text-kerf-200' : 'text-ink-300'} />
-        {/* Label truncates at narrow viewport */}
-        <span className="truncate max-w-[6rem] sm:max-w-[8rem]">{label}</span>
-        {/* Desktop: show X delete button when selected */}
-        {isSel && (
-          <button
-            type="button"
-            aria-label={`Delete ${label}`}
-            onClick={(ev) => { ev.stopPropagation(); onDelete() }}
-            className="ml-0.5 -mr-0.5 inline-flex items-center justify-center w-4 h-4 rounded text-ink-400 hover:text-red-300 hover:bg-red-900/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/60"
-          >
-            <X size={10} aria-hidden="true" />
-          </button>
-        )}
-      </button>
-      {/* Dot-menu — always accessible; on touch long-press opens it automatically. */}
-      <button
-        type="button"
-        aria-label={`Actions for ${label}`}
-        aria-expanded={dotMenuOpen}
-        aria-haspopup="menu"
-        onClick={(e) => { e.stopPropagation(); setDotMenuOpen((v) => !v) }}
-        className={`inline-flex items-center justify-center w-5 h-5 rounded text-ink-500 hover:text-ink-200 hover:bg-ink-700 transition-colors flex-shrink-0
-          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kerf-300/60
-          ${dotMenuOpen ? 'text-ink-200 bg-ink-700' : ''}`}
-        title="Feature actions"
-      >
-        <MoreHorizontal size={12} aria-hidden="true" />
-      </button>
-      {dotMenuOpen && (
-        <div
-          role="menu"
-          className="absolute top-full left-0 mt-1 z-50 min-w-[130px] rounded-md border border-ink-700 bg-ink-900 shadow-xl shadow-black/50 py-0.5"
-        >
-          <button
-            role="menuitem"
-            type="button"
-            onClick={() => { setDotMenuOpen(false); onDelete() }}
-            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-300 hover:bg-red-900/25 focus-visible:outline-none focus-visible:bg-red-900/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kerf-300/70"
-          >
-            <Trash2 size={11} aria-hidden="true" />
-            Delete feature
-          </button>
         </div>
       )}
     </div>

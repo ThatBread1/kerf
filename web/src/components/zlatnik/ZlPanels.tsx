@@ -2,10 +2,10 @@
 // silver-tabbed panes ("Strom", "Vlastnosti", "Nástroje", "Nápověda") on a
 // navy gradient, a vertical feature tree and the grouped tool palette.
 
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode, type KeyboardEvent } from 'react'
 import { ChevronDown, ChevronRight, ChevronUp, Eye, EyeOff, Trash2, Box } from 'lucide-react'
 import { TOOL_GROUPS, type ToolDef, type ToolNode } from '../../lib/zlatnik/tools'
-import { opLabel } from '../../lib/zlatnik/cs'
+import { nodeLabel } from '../../lib/zlatnik/cs'
 
 // ── Panel chrome ──────────────────────────────────────────────────────────────
 
@@ -75,16 +75,6 @@ export function ZlIconButton({
 
 // ── Feature tree ("Strom") ────────────────────────────────────────────────────
 
-const BOOLEAN_NAMES: Record<string, string> = { cut: 'Odečtení', fuse: 'Sjednocení', union: 'Sjednocení', common: 'Průnik' }
-const SOLID_NAMES: Record<string, string> = { sphere: 'Koule', torus: 'Torus', cylinder: 'Válec', cone: 'Kužel', box: 'Kvádr', tube: 'Trubka' }
-
-/** Tree label: booleans and solids say what they are ("Odečtení", "Koule"). */
-export function nodeLabel(node: ToolNode, fallback?: string): string {
-  if (node.op === 'boolean') return BOOLEAN_NAMES[String(node.kind || 'cut')] || opLabel('boolean', fallback)
-  if (node.op === 'primitive') return SOLID_NAMES[String(node.shape || 'sphere')] || opLabel('primitive', fallback)
-  return opLabel(node.op, fallback)
-}
-
 export function FeatureTreePanel({
   tree,
   selectedId,
@@ -105,8 +95,28 @@ export function FeatureTreePanel({
   fileName: string
 }) {
   const [open, setOpen] = useState(true)
+  const listRef = useRef<HTMLUListElement | null>(null)
+  const selIdx = tree.findIndex((n) => n.id === selectedId)
+  const focusIdx = selIdx >= 0 ? selIdx : 0
+  // Arrow keys / Home / End move the selection like 3Design's tree.
+  const onKeyDown = (e: KeyboardEvent<HTMLUListElement>) => {
+    if (!tree.length) return
+    if (e.key === 'Delete' && selIdx >= 0) { e.preventDefault(); onDelete(tree[selIdx].id); return }
+    const last = tree.length - 1
+    const target: Record<string, number> = {
+      ArrowDown: Math.min(focusIdx + 1, last), ArrowRight: Math.min(focusIdx + 1, last),
+      ArrowUp: Math.max(focusIdx - 1, 0), ArrowLeft: Math.max(focusIdx - 1, 0),
+      Home: 0, End: last,
+    }
+    if (!(e.key in target)) return
+    const next = target[e.key]
+    e.preventDefault()
+    onSelect(tree[next].id)
+    const btns = listRef.current?.querySelectorAll<HTMLButtonElement>('[data-tree-btn]')
+    btns?.[next]?.focus()
+  }
   return (
-    <div role="tree" aria-label="Strom prvků" className="py-1.5 text-[13px]" data-testid="zl-tree">
+    <div className="py-1.5 text-[13px]" data-testid="zl-tree">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -117,13 +127,13 @@ export function FeatureTreePanel({
         <Box size={14} className="text-kerf-300" aria-hidden="true" />
         <span className="truncate underline decoration-kerf-300/60 underline-offset-2">{fileName}</span>
       </button>
-      {open && (
-        <ul className="mt-0.5">
-          {tree.length === 0 && (
-            <li className="px-7 py-2 text-[12px] text-ink-300 italic leading-snug">
-              Zatím prázdné — vyberte nástroj vpravo v panelu Nástroje.
-            </li>
-          )}
+      {open && tree.length === 0 && (
+        <p className="px-7 py-2 text-[12px] text-ink-300 italic leading-snug">
+          Zatím prázdné — vyberte nástroj vpravo v panelu Nástroje.
+        </p>
+      )}
+      {open && tree.length > 0 && (
+        <ul className="mt-0.5" role="tree" aria-label="Strom prvků" ref={listRef} onKeyDown={onKeyDown}>
           {tree.map((node, idx) => {
             const kind = kindByOp[node.op]
             const Icon = kind?.icon || Box
@@ -134,7 +144,7 @@ export function FeatureTreePanel({
                 key={node.id}
                 role="treeitem"
                 aria-selected={isSel}
-                aria-level={2}
+                aria-level={1}
                 className={`group flex items-center gap-1 pl-5 pr-1 border-l-2 ${isSel ? 'bg-[var(--color-select)]/25 border-[var(--color-select)]' : 'border-transparent hover:bg-white/5'}`}
               >
                 <button
@@ -142,6 +152,9 @@ export function FeatureTreePanel({
                   onClick={() => onSelect(node.id)}
                   className={`flex-1 min-w-0 flex items-center gap-1.5 py-[5px] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kerf-300/70 rounded ${off ? 'opacity-45' : ''}`}
                   data-testid={`zl-tree-item-${idx}`}
+                  data-tree-btn=""
+                  tabIndex={idx === focusIdx ? 0 : -1}
+                  aria-label={`${nodeLabel(node, kind?.label)}, prvek ${idx + 1}${off ? ' (vypnuto)' : ''}`}
                   title={node.id}
                 >
                   <span className="text-[10px] font-mono text-ink-400 w-4 text-right flex-shrink-0">{idx + 1}</span>

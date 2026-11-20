@@ -281,3 +281,14 @@ export function optionLabel(label: string): string {
 export function opHint(op: string, fallback?: unknown): string {
   return OP_HINTS[op] || (typeof fallback === 'string' ? fallback : '')
 }
+
+const BOOLEAN_NAMES: Record<string, string> = { cut: 'Odečtení', fuse: 'Sjednocení', union: 'Sjednocení', common: 'Průnik' }
+const SOLID_NAMES: Record<string, string> = { sphere: 'Koule', torus: 'Torus', cylinder: 'Válec', cone: 'Kužel', box: 'Kvádr', tube: 'Trubka' }
+
+/** Tree label: booleans and solids say what they are ("Odečtení", "Koule"). */
+export function nodeLabel(node: { op: string; kind?: unknown; shape?: unknown }, fallback?: string): string {
+  if (node.op === 'boolean') return BOOLEAN_NAMES[String(node.kind || 'cut')] || opLabel('boolean', fallback)
+  if (node.op === 'primitive') return SOLID_NAMES[String(node.shape || 'sphere')] || opLabel('primitive', fallback)
+  return opLabel(node.op, fallback)
+}
+
