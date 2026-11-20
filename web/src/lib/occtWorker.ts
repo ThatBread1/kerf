@@ -2694,13 +2694,24 @@ function opBoolean(oc: OcInstance, _prev: OcHandle, node: OpNode, _sketches: Ske
   if (!b) throw new Error(`boolean: target_b '${bId}' not found in evaluated tree`)
 
   // Operands must be solids — surface bodies need feature_to_solid first.
-  if (!_isSolid(oc, a)) {
+  // Compounds of solids (prong heads, settings, seat cutters) are fine:
+  // BRepAlgoAPI handles them directly.
+  const _solidish = (sh: OcHandle) => {
+    if (_isSolid(oc, sh)) return true
+    try {
+      const ex = new oc.TopExp_Explorer_2(sh, oc.TopAbs_ShapeEnum.TopAbs_SOLID, oc.TopAbs_ShapeEnum.TopAbs_SHAPE)
+      const any = ex.More()
+      ex.delete()
+      return any
+    } catch { return false }
+  }
+  if (!_solidish(a)) {
     const kind = _shapeKindName(oc, a)
     throw new Error(
       `boolean: target_a is a ${kind}, not a solid — run feature_to_solid on '${aId}' first`
     )
   }
-  if (!_isSolid(oc, b)) {
+  if (!_solidish(b)) {
     const kind = _shapeKindName(oc, b)
     throw new Error(
       `boolean: target_b is a ${kind}, not a solid — run feature_to_solid on '${bId}' first`
@@ -2715,6 +2726,7 @@ function opBoolean(oc: OcInstance, _prev: OcHandle, node: OpNode, _sketches: Ske
       algo = track(tracker, new oc.BRepAlgoAPI_Cut_3(a, b, pr()))
       break
     case 'fuse':
+    case 'union':
       algo = track(tracker, new oc.BRepAlgoAPI_Fuse_3(a, b, pr()))
       break
     case 'common':
@@ -6851,6 +6863,8 @@ function opPrimitive(oc: OcInstance, node: OpNode): OcHandle {
   }
 }
 
+const releaseShape = cleanupShape
+
 function evaluateTree(oc: OcInstance, tree: FeatureNode[], sketches: SketchMap): Mesh[] {
   if (!Array.isArray(tree)) tree = []
   const tracker = makeTracker()
@@ -6870,6 +6884,15 @@ function evaluateTree(oc: OcInstance, tree: FeatureNode[], sketches: SketchMap):
   // Parallel to bodyMap — stores the face namer for each body so boolean ops
   // (T3) can resolve operand face names at namer-call time.
   const bodyFaceNamers = {}
+  // Shapes recorded in bodyMap must outlive the point where they stop being
+  // `current` — a later boolean / to_solid looks them up by id. Freeing them
+  // early left boolean operands as deleted handles ("target_a is a UNKNOWN").
+  // Aliased shapes are released once, at the end of the evaluation.
+  const cleanupShape = (oc_: OcInstance, shape: OcHandle) => {
+    if (!shape) return
+    for (const k in bodyMap) if (bodyMap[k] === shape) return
+    releaseShape(oc_, shape)
+  }
 
   // Helper: push the current shape as a mesh entry, including faceNames.
   // Which feature node produced `current` — tagged onto each pushed body so
@@ -7156,6 +7179,13 @@ function evaluateTree(oc: OcInstance, tree: FeatureNode[], sketches: SketchMap):
           let boolNamesA = {}, boolNamesB = {}
           const boolRef: BuilderRef = {}
           next = opBoolean(oc, null, node, sketches, tracker, bodyMap, boolRef)
+          // The operands are consumed by the boolean: drop their already-pushed
+          // meshes so the viewport doesn't show the uncut body on top of the
+          // result (e.g. the plain shank over the shank-with-seat).
+          for (let mi = meshes.length - 1; mi >= 0; mi--) {
+            const src = meshes[mi].sourceNode
+            if (src && (src === node.target_a_id || src === node.target_b_id)) meshes.splice(mi, 1)
+          }
           // Resolve operand face names from their respective namers if available.
           // bodyFaceNamers is maintained below.
           try {
@@ -7635,6 +7665,11 @@ function evaluateTree(oc: OcInstance, tree: FeatureNode[], sketches: SketchMap):
     pushCurrentMesh(`body-${meshes.length}`)
     cleanupShape(oc, current)
     current = null
+  }
+  const released = new Set()
+  for (const k in bodyMap) {
+    const sh = bodyMap[k]
+    if (sh && !released.has(sh)) { released.add(sh); releaseShape(oc, sh) }
   }
   freeAll(tracker)
   void currentTrack

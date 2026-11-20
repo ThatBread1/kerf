@@ -45,6 +45,7 @@ import { disposeObject } from '../lib/threeNarrow.js'
 import { MonitorX } from 'lucide-react'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
+import { VIEWPORT_BG, GRID_MAJOR, GRID_MINOR, makeViewportGradient } from '../lib/viewportBackground.js'
 import { cullByFrustum, frustumCullEnabled } from '../lib/frustumCull.js'
 import { materialFor } from '../lib/jewelryMaterials.js'
 import { detectWebGL } from '../lib/detectWebGL.js'
@@ -81,7 +82,7 @@ export interface FeatureRendererHandle {
   snapshot: () => string | undefined
 }
 
-const BG_COLOR = 0x0f1115
+const BG_COLOR = VIEWPORT_BG
 const HOVER_FACE = 0xffd633
 const SELECTED_FACE = 0xc9a96b
 const PUSHPULL_FACE = 0xffb84d
@@ -153,7 +154,7 @@ const FeatureRenderer = forwardRef<FeatureRendererHandle, FeatureRendererProps>(
     renderer.domElement.addEventListener('webglcontextlost', onContextLost)
 
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(BG_COLOR)
+    scene.background = makeViewportGradient()
 
     const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 5000)
     camera.position.set(80, 80, 80)
@@ -176,7 +177,9 @@ const FeatureRenderer = forwardRef<FeatureRendererHandle, FeatureRendererProps>(
     scene.environment = studioEnv
     pmrem.dispose()
 
-    const grid = new THREE.GridHelper(400, 40, 0x232730, 0x14171c)
+    const grid = new THREE.GridHelper(400, 40, GRID_MAJOR, GRID_MINOR)
+    ;(grid.material as THREE.Material).transparent = true
+    ;(grid.material as THREE.Material).opacity = 0.35
     grid.rotation.x = Math.PI / 2
     scene.add(grid)
     scene.add(new THREE.AxesHelper(20))

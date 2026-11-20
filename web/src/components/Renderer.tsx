@@ -222,8 +222,8 @@ function applyAppearance(
   material.roughness = typeof ov.roughness === 'number' ? ov.roughness : BASE_ROUGHNESS
   material.needsUpdate = true
 }
-const BG_COLOR = 0x0f1115 // ink-900
-const BG_COLOR_TOP = 0x1a1d24 // soft studio gradient top (slightly warmer)
+const BG_COLOR = 0x2f6b4c // 3Design-style backdrop, bottom (teal-green)
+const BG_COLOR_TOP = 0x0c4a82 // backdrop top (deep blue)
 const KERF_YELLOW = 0xffd633
 const INK_300 = 0x8a93a6
 
@@ -928,7 +928,7 @@ function Renderer({
     scene.add(contactShadowPlane)
 
     // Subtle ground grid.
-    const grid = new THREE.GridHelper(400, 40, 0x232730, 0x14171c)
+    const grid = new THREE.GridHelper(400, 40, 0x6f93b8, 0x3f6b8f)
     grid.rotation.x = Math.PI / 2 // JSCAD is Z-up; spin grid into XY plane.
     grid.userData._heroChrome = true // hide for hero shots
     scene.add(grid)

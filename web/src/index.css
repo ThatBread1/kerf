@@ -16,39 +16,76 @@
   }
 }
 
-/* Kerf design tokens. Final palette comes from the branding pass. */
+/* Design tokens — "zlatník" theme modelled on 3DESIGN CAD: deep navy
+ * surfaces, cool blue-grey text and a gold accent (the construction-plane
+ * yellow of 3Design, warmed towards 18k gold). Every component draws from
+ * these, so changing them re-skins the whole app. */
 @theme {
   --font-sans: "Inter", "Geist", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-display: "Geist", "Inter", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
-  /* Surfaces */
-  --color-ink-950: #0a0b0d;
-  --color-ink-900: #0f1115;
-  --color-ink-850: #14171c;
-  --color-ink-800: #1a1d24;
-  --color-ink-700: #232730;
-  --color-ink-600: #2d323d;
-  --color-ink-500: #3a4150;
-  --color-ink-400: #5a6275;
-  --color-ink-300: #8a93a6;
-  --color-ink-200: #b8bfcc;
-  --color-ink-100: #e2e6ee;
-  --color-ink-50:  #f4f6fa;
+  /* Surfaces — navy, darkest first */
+  --color-ink-950: #0a1030;
+  --color-ink-900: #0f1840;
+  --color-ink-850: #14204f;
+  --color-ink-800: #1b2a60;
+  --color-ink-700: #263873;
+  --color-ink-600: #33478a;
+  --color-ink-500: #4a5fa3;
+  --color-ink-400: #7787bd;
+  --color-ink-300: #a3b0da;
+  --color-ink-200: #c8d0ec;
+  --color-ink-100: #e7ebf8;
+  --color-ink-50:  #f5f7fd;
 
-  /* Brand: kerf yellow (cut-line) */
-  --color-kerf-50:  #fffbe6;
-  --color-kerf-100: #fff3a8;
-  --color-kerf-200: #ffe566;
-  --color-kerf-300: #ffd633;
-  --color-kerf-400: #f5c518;
-  --color-kerf-500: #d9a800;
-  --color-kerf-600: #a87f00;
-  --color-kerf-700: #6b5100;
+  /* Accent — gold (token names kept from upstream so every component follows) */
+  --color-kerf-50:  #fdf7e3;
+  --color-kerf-100: #fbebb8;
+  --color-kerf-200: #f8db84;
+  --color-kerf-300: #f2c64f;
+  --color-kerf-400: #e3ad2a;
+  --color-kerf-500: #c48f16;
+  --color-kerf-600: #946b0f;
+  --color-kerf-700: #624608;
 
   /* Accents */
   --color-cyan-edge: #6bd4ff;
   --color-magenta-edge: #ff6bd4;
+
+  /* 3Design-style panel chrome */
+  --color-panel-top: #17235a;
+  --color-panel-mid: #2b3f93;
+  --color-panel-bottom: #121c4a;
+  --color-select: #4aa3ff;
+}
+
+/* Side panels get the vertical navy sheen of 3Design's Tree / Tools panes. */
+.zl-panel {
+  background: linear-gradient(180deg, var(--color-panel-top) 0%, var(--color-panel-mid) 45%, var(--color-panel-bottom) 100%);
+}
+
+/* Silver tab header ("Strom", "Vlastnosti", "Nástroje" …). */
+.zl-tab {
+  background: linear-gradient(180deg, #f4f6fb 0%, #c9d0e0 55%, #aeb7cc 100%);
+  color: #10183f;
+  border: 1px solid #8d97b3;
+  border-bottom: none;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+/* Glossy round tool button, a cleaner take on 3Design's icon tiles. */
+.zl-tool {
+  background: radial-gradient(120% 120% at 30% 20%, #4f67b8 0%, #26397a 55%, #18265a 100%);
+  border: 1px solid rgba(160, 180, 235, 0.35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+.zl-tool:hover {
+  background: radial-gradient(120% 120% at 30% 20%, #6a83d6 0%, #3149a0 55%, #1d2e6c 100%);
+  border-color: rgba(242, 198, 79, 0.7);
+}
+.zl-tool:active {
+  transform: translateY(1px);
 }
 
 html, body, #root {
