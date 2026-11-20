@@ -49,7 +49,7 @@ export const OP_HINTS: Record<string, string> = {
   primitive: 'Základní těleso (koule, torus, válec, kužel, kvádr, trubka) v počátku. Posuňte ho v sekci Poloha.',
   ring_shank: 'Obroučka prstenu podle velikosti. CZ/EU velikost = vnitřní obvod v mm (např. 54). Prst prochází osou Z, vrchol prstenu je nahoře (+Y).',
   bangle: 'Pevný nebo otevřený náramek podle obvodu zápěstí.',
-  gemstone: 'Broušený kámen. Materiál (diamond, ruby, sapphire, emerald…) určuje barvu v náhledu.',
+  gemstone: 'Broušený kámen. Materiál (diamant, rubín, safír, smaragd) určuje barvu v náhledu.',
   gem_seat: 'Fréza pro usazení kamene. Odečtěte ji od kovu Booleovskou operací (Odečíst).',
   bezel_seat: 'Vnitřní nosná hrana pro kastlík / korunku.',
   fishtail_seat: 'Lůžko s rybinovým (bright-cut) výbrusem pro drobné kameny.',

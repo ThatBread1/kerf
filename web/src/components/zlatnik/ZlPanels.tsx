@@ -6,6 +6,7 @@ import { useRef, useState, type ReactNode, type KeyboardEvent } from 'react'
 import { ChevronDown, ChevronRight, ChevronUp, Eye, EyeOff, Trash2, Box } from 'lucide-react'
 import { TOOL_GROUPS, type ToolDef, type ToolNode } from '../../lib/zlatnik/tools'
 import { nodeLabel } from '../../lib/zlatnik/cs'
+import { shapePolygon, TOOL_SHAPES } from '../../lib/zlatnik/m3shapes'
 
 // ── Panel chrome ──────────────────────────────────────────────────────────────
 
@@ -25,19 +26,18 @@ export function ZlPanel({
   testId?: string
 }) {
   return (
-    <section className={`flex flex-col min-h-0 ${className}`} data-testid={testId} aria-label={title}>
-      <div className="flex items-end justify-between gap-2 px-1.5 pt-1.5 border-b border-[#8d97b3]/70 flex-shrink-0">
-        <h2 className="zl-tab px-3 py-[3px] rounded-t-md text-[12px] font-semibold tracking-wide select-none">
-          {title}
-        </h2>
-        {actions && <div className="flex items-center gap-0.5 pb-1">{actions}</div>}
+    <section className={`zl-panel flex flex-col min-h-0 overflow-hidden ${className}`} data-testid={testId} aria-label={title}>
+      <div className="flex items-center justify-between gap-2 pl-5 pr-2.5 pt-4 pb-2 flex-shrink-0">
+        <h2 className={`zl-tab select-none truncate min-w-0 ${actions ? '!text-[18px]' : ''}`}>{title}</h2>
+        {actions && <div className="flex items-center gap-0.5 flex-shrink-0">{actions}</div>}
       </div>
       <div className={`flex-1 min-h-0 overflow-y-auto ${bodyClassName}`}>{children}</div>
     </section>
   )
 }
 
-/** Small square icon button used in panel headers and the properties bar. */
+/** Round M3 icon button (36 px) for card headers; `ok` is the filled
+ *  primary "Hotovo" action, the rest are tonal. */
 export function ZlIconButton({
   label,
   onClick,
@@ -54,10 +54,10 @@ export function ZlIconButton({
   testId?: string
 }) {
   const toneCls = tone === 'ok'
-    ? 'text-emerald-300 hover:bg-emerald-400/15'
+    ? 'm3-btn-filled'
     : tone === 'danger'
-      ? 'text-red-300 hover:bg-red-400/15'
-      : 'text-ink-200 hover:bg-white/10 hover:text-kerf-200'
+      ? 'bg-[var(--color-m3-surface-container-highest)] text-[var(--color-m3-on-surface)] hover:bg-[var(--color-m3-error-container)] hover:text-[#ffdad6]'
+      : 'bg-[var(--color-m3-surface-container-highest)] text-[var(--color-m3-on-surface)] hover:bg-[#4a4337]'
   return (
     <button
       type="button"
@@ -66,7 +66,7 @@ export function ZlIconButton({
       onClick={onClick}
       disabled={disabled}
       data-testid={testId}
-      className={`inline-flex items-center justify-center w-7 h-7 rounded-md transition-colors disabled:opacity-35 disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kerf-300/70 ${toneCls}`}
+      className={`m3-btn inline-flex items-center justify-center w-8 h-8 flex-shrink-0 disabled:opacity-35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-m3-primary)] ${toneCls}`}
     >
       {children}
     </button>
@@ -116,16 +116,16 @@ export function FeatureTreePanel({
     btns?.[next]?.focus()
   }
   return (
-    <div className="py-1.5 text-[13px]" data-testid="zl-tree">
+    <div className="px-2 pb-3 text-[14px]" data-testid="zl-tree">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center gap-1.5 px-2 py-1 text-ink-50 font-semibold hover:bg-white/5"
+        className="m3-list-item w-full flex items-center gap-2 px-3 h-10 text-[var(--color-m3-on-surface)] font-semibold"
         aria-expanded={open}
       >
         {open ? <ChevronDown size={13} aria-hidden="true" /> : <ChevronRight size={13} aria-hidden="true" />}
-        <Box size={14} className="text-kerf-300" aria-hidden="true" />
-        <span className="truncate underline decoration-kerf-300/60 underline-offset-2">{fileName}</span>
+        <Box size={16} className="text-[var(--color-m3-primary)]" aria-hidden="true" />
+        <span className="truncate">{fileName}</span>
       </button>
       {open && tree.length === 0 && (
         <p className="px-7 py-2 text-[12px] text-ink-300 italic leading-snug">
@@ -133,7 +133,7 @@ export function FeatureTreePanel({
         </p>
       )}
       {open && tree.length > 0 && (
-        <ul className="mt-0.5" role="tree" aria-label="Strom prvků" ref={listRef} onKeyDown={onKeyDown}>
+        <ul className="mt-1 space-y-0.5" role="tree" aria-label="Strom prvků" ref={listRef} onKeyDown={onKeyDown}>
           {tree.map((node, idx) => {
             const kind = kindByOp[node.op]
             const Icon = kind?.icon || Box
@@ -145,29 +145,29 @@ export function FeatureTreePanel({
                 role="treeitem"
                 aria-selected={isSel}
                 aria-level={1}
-                className={`group flex items-center gap-1 pl-5 pr-1 border-l-2 ${isSel ? 'bg-[var(--color-select)]/25 border-[var(--color-select)]' : 'border-transparent hover:bg-white/5'}`}
+                className="m3-list-item group flex items-center gap-1 pl-4 pr-2 h-11"
               >
                 <button
                   type="button"
                   onClick={() => onSelect(node.id)}
-                  className={`flex-1 min-w-0 flex items-center gap-1.5 py-[5px] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kerf-300/70 rounded ${off ? 'opacity-45' : ''}`}
+                  className={`flex-1 min-w-0 h-full flex items-center gap-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-m3-primary)] rounded-full ${off ? 'opacity-45' : ''}`}
                   data-testid={`zl-tree-item-${idx}`}
                   data-tree-btn=""
                   tabIndex={idx === focusIdx ? 0 : -1}
                   aria-label={`${nodeLabel(node, kind?.label)}, prvek ${idx + 1}${off ? ' (vypnuto)' : ''}`}
                   title={node.id}
                 >
-                  <span className="text-[10px] font-mono text-ink-400 w-4 text-right flex-shrink-0">{idx + 1}</span>
-                  <Icon size={13} className={isSel ? 'text-kerf-200' : 'text-ink-200'} aria-hidden="true" />
-                  <span className={`truncate ${isSel ? 'text-white font-medium' : 'text-ink-100'} ${off ? 'line-through' : ''}`}>
+                  <span className={`text-[11px] font-mono w-4 text-right flex-shrink-0 ${isSel ? 'text-[#001a43]/70' : 'text-ink-400'}`}>{idx + 1}</span>
+                  <Icon size={17} className={isSel ? 'text-[#001a43]' : 'text-[var(--color-m3-on-surface-variant)]'} aria-hidden="true" />
+                  <span className={`truncate ${isSel ? 'text-[#001a43] font-semibold' : 'text-[var(--color-m3-on-surface)] font-medium'} ${off ? 'line-through' : ''}`}>
                     {nodeLabel(node, kind?.label)}
                   </span>
                 </button>
                 <span className={`flex items-center ${isSel ? '' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'}`}>
-                  <button type="button" onClick={() => onMove(node.id, 'up')} disabled={idx === 0} aria-label="Posunout výš" title="Posunout výš" className="p-0.5 rounded text-ink-300 hover:text-kerf-200 disabled:opacity-30"><ChevronUp size={12} /></button>
-                  <button type="button" onClick={() => onMove(node.id, 'down')} disabled={idx === tree.length - 1} aria-label="Posunout níž" title="Posunout níž" className="p-0.5 rounded text-ink-300 hover:text-kerf-200 disabled:opacity-30"><ChevronDown size={12} /></button>
-                  <button type="button" onClick={() => onToggleSuppressed(node.id)} aria-label={off ? 'Zapnout prvek' : 'Vypnout prvek'} title={off ? 'Zapnout prvek' : 'Vypnout prvek (dočasně vynechat)'} className="p-0.5 rounded text-ink-300 hover:text-kerf-200">{off ? <EyeOff size={12} /> : <Eye size={12} />}</button>
-                  <button type="button" onClick={() => onDelete(node.id)} aria-label="Smazat prvek" title="Smazat prvek" className="p-0.5 rounded text-ink-300 hover:text-red-300"><Trash2 size={12} /></button>
+                  <button type="button" onClick={() => onMove(node.id, 'up')} disabled={idx === 0} aria-label="Posunout výš" title="Posunout výš" className={`p-1 rounded-full hover:bg-black/10 ${isSel ? 'text-[#001a43]' : 'text-ink-300'} disabled:opacity-30`}><ChevronUp size={12} /></button>
+                  <button type="button" onClick={() => onMove(node.id, 'down')} disabled={idx === tree.length - 1} aria-label="Posunout níž" title="Posunout níž" className={`p-1 rounded-full hover:bg-black/10 ${isSel ? 'text-[#001a43]' : 'text-ink-300'} disabled:opacity-30`}><ChevronDown size={12} /></button>
+                  <button type="button" onClick={() => onToggleSuppressed(node.id)} aria-label={off ? 'Zapnout prvek' : 'Vypnout prvek'} title={off ? 'Zapnout prvek' : 'Vypnout prvek (dočasně vynechat)'} className={`p-1 rounded-full hover:bg-black/10 ${isSel ? 'text-[#001a43]' : 'text-ink-300'} disabled:opacity-30`}>{off ? <EyeOff size={12} /> : <Eye size={12} />}</button>
+                  <button type="button" onClick={() => onDelete(node.id)} aria-label="Smazat prvek" title="Smazat prvek" className={`p-1 rounded-full hover:bg-black/10 ${isSel ? 'text-[#001a43]' : 'text-ink-300'} disabled:opacity-30`}><Trash2 size={12} /></button>
                 </span>
               </li>
             )
@@ -195,28 +195,34 @@ export function ToolPalette({
   onHover: (tool: ToolDef | null) => void
 }) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  let k = 0
   return (
-    <div className="pb-3" data-testid="zl-tools" onMouseLeave={() => onHover(null)}>
+    <div className="pb-4" data-testid="zl-tools" onMouseLeave={() => onHover(null)}>
       {TOOL_GROUPS.map((g) => {
         const isCollapsed = !!collapsed[g.id]
         return (
-          <div key={g.id} className="pt-2">
+          <div key={g.id} className="pt-1">
             <button
               type="button"
               onClick={() => setCollapsed((c) => ({ ...c, [g.id]: !c[g.id] }))}
-              className="w-full flex items-center gap-2 px-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-100 hover:text-kerf-200"
+              className="w-full flex items-center gap-2 px-5 h-8 zl-section-label hover:opacity-80"
               aria-expanded={!isCollapsed}
             >
               <span className="flex-shrink-0">{g.label}</span>
-              <span className="flex-1 h-px bg-gradient-to-r from-ink-300/60 to-transparent" aria-hidden="true" />
-              {isCollapsed ? <ChevronRight size={12} aria-hidden="true" /> : <ChevronDown size={12} aria-hidden="true" />}
+              <span className="flex-1" aria-hidden="true" />
+              <span className={`transition-transform duration-300 ${isCollapsed ? '-rotate-90' : ''}`} style={{ transitionTimingFunction: 'var(--m3-spring-fast-spatial)' }}>
+                <ChevronDown size={14} aria-hidden="true" />
+              </span>
             </button>
             {!isCollapsed && (
-              <div className="grid grid-cols-3 gap-x-1 gap-y-2 px-2 pt-2">
+              <div className="grid grid-cols-4 gap-x-1 gap-y-3 px-3 pt-1.5 pb-2">
                 {g.tools.map((t) => {
                   const need = NEEDS_BODIES[t.id] || 0
                   const disabled = bodyCount < need
                   const Icon = t.icon
+                  const i = k++
+                  const rest = TOOL_SHAPES[i % TOOL_SHAPES.length]
+                  const tone = i % 2 === 0 ? 'primary' : 'tertiary'
                   return (
                     <button
                       key={t.id}
@@ -227,12 +233,20 @@ export function ToolPalette({
                       onFocus={() => onHover(t)}
                       title={disabled ? `${t.label} — nejdřív vytvořte ${need === 1 ? 'těleso' : 'alespoň dvě tělesa'}` : t.hint}
                       data-testid={`zl-tool-${t.id}`}
-                      className="group flex flex-col items-center gap-1 rounded-md py-1 disabled:opacity-35 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kerf-300/70"
+                      className="group flex flex-col items-center gap-1.5 rounded-2xl py-1 disabled:cursor-not-allowed focus-visible:outline-none"
                     >
-                      <span className="zl-tool w-10 h-10 rounded-full inline-flex items-center justify-center text-ink-50 group-hover:text-kerf-100 group-disabled:pointer-events-none">
-                        <Icon size={18} aria-hidden="true" />
+                      <span
+                        className="zl-tool w-14 h-14 inline-flex items-center justify-center"
+                        data-tone={tone}
+                        style={{
+                          ['--shape' as string]: shapePolygon(rest),
+                          ['--shape-hover' as string]: shapePolygon('circle'),
+                          ['--shape-press' as string]: shapePolygon('squircle'),
+                        }}
+                      >
+                        <Icon size={22} strokeWidth={2.1} aria-hidden="true" />
                       </span>
-                      <span className="text-[10.5px] leading-tight text-center text-ink-100 group-hover:text-white px-0.5">{t.label}</span>
+                      <span className={`text-[11.5px] leading-tight text-center font-medium px-0.5 ${disabled ? 'text-ink-500' : tone === 'primary' ? 'text-[var(--color-kerf-100)]' : 'text-[var(--color-m3-on-surface)]'}`}>{t.label}</span>
                     </button>
                   )
                 })}
@@ -266,20 +280,20 @@ export function PlacementSection({
   const scale = feature.scale === undefined || feature.scale === '' ? 1 : feature.scale
   const anySet = PLACE_FIELDS.some((f) => Number(feature[f.key]) !== 0 && feature[f.key] !== undefined && feature[f.key] !== '') || Number(scale) !== 1
   return (
-    <div className="mx-3 mb-3 rounded-md border border-ink-600/70 bg-ink-950/35" data-testid="zl-placement">
-      <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-ink-700/70">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-100">Poloha</span>
+    <div className="mx-3 mb-4 rounded-[var(--m3-shape-lg)] bg-[var(--color-m3-surface-container-high)]" data-testid="zl-placement">
+      <div className="flex items-center justify-between px-4 pt-3 pb-1">
+        <span className="zl-section-label">Poloha</span>
         <button
           type="button"
           disabled={!anySet}
           onClick={() => onPatch({ place_x: 0, place_y: 0, place_z: 0, rot_x: 0, rot_y: 0, rot_z: 0, scale: 1 })}
-          className="text-[10.5px] text-ink-300 hover:text-kerf-200 disabled:opacity-35"
+          className="m3-btn m3-btn-text px-3 h-8 text-[12px] font-semibold disabled:opacity-35"
         >
           Vynulovat
         </button>
       </div>
       {typeof feature.on_ring === 'string' && feature.on_ring && (
-        <div className="mx-2 mt-2 px-2 py-1.5 rounded bg-kerf-300/10 border border-kerf-300/30 text-[10.5px] leading-snug text-kerf-100 flex items-start gap-2">
+        <div className="mx-3 mt-1 px-3 py-2 rounded-[var(--m3-shape-md)] bg-[var(--color-m3-primary-container)] text-[11.5px] leading-snug text-[var(--color-m3-on-primary-container)] flex items-start gap-2">
           <span className="flex-1">Ukotveno na obroučce — <b>Posun Y</b> se měří od jejího vrcholu a díl se posune s ní při změně velikosti.</span>
           <button
             type="button"
@@ -291,22 +305,22 @@ export function PlacementSection({
           </button>
         </div>
       )}
-      <div className="grid grid-cols-3 gap-1.5 p-2">
+      <div className="grid grid-cols-3 gap-2 px-3 pt-2 pb-3">
         {PLACE_FIELDS.map((f) => (
           <label key={f.key} className="flex flex-col gap-0.5">
-            <span className="text-[10px] text-ink-300">{f.label} <span className="text-ink-400">{f.unit}</span></span>
+            <span className="text-[11px] text-[var(--color-m3-on-surface-variant)]">{f.label} <span className="text-ink-400">{f.unit}</span></span>
             <input
               type="number"
               step={f.step}
               value={(feature[f.key] as number | string | undefined) ?? 0}
               onChange={(e) => onPatch({ [f.key]: e.target.value === '' ? 0 : Number(e.target.value) })}
               aria-label={`${f.label} (${f.unit})`}
-              className="w-full h-7 px-1.5 text-[12px] font-mono bg-ink-950/70 border border-ink-700 rounded text-ink-50 focus:outline-none focus:border-kerf-300/70"
+              className="w-full px-2.5 text-[13px] font-mono bg-ink-950/70 border border-ink-700 rounded text-ink-50 focus:outline-none focus:border-kerf-300/70"
             />
           </label>
         ))}
         <label className="flex flex-col gap-0.5 col-span-3">
-          <span className="text-[10px] text-ink-300">Měřítko <span className="text-ink-400">×</span></span>
+          <span className="text-[11px] text-[var(--color-m3-on-surface-variant)]">Měřítko <span className="text-ink-400">×</span></span>
           <input
             type="number"
             step={0.05}
@@ -314,7 +328,7 @@ export function PlacementSection({
             value={scale as number | string}
             onChange={(e) => onPatch({ scale: e.target.value === '' ? 1 : Number(e.target.value) })}
             aria-label="Měřítko"
-            className="w-full h-7 px-1.5 text-[12px] font-mono bg-ink-950/70 border border-ink-700 rounded text-ink-50 focus:outline-none focus:border-kerf-300/70"
+            className="w-full px-2.5 text-[13px] font-mono bg-ink-950/70 border border-ink-700 rounded text-ink-50 focus:outline-none focus:border-kerf-300/70"
           />
         </label>
       </div>

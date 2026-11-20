@@ -16,76 +16,234 @@
   }
 }
 
-/* Design tokens — "zlatník" theme modelled on 3DESIGN CAD: deep navy
- * surfaces, cool blue-grey text and a gold accent (the construction-plane
- * yellow of 3Design, warmed towards 18k gold). Every component draws from
- * these, so changing them re-skins the whole app. */
+/* Design tokens — Material 3 Expressive, dark scheme.
+ * Generated with @material/material-color-utilities (SchemeFidelity, seed
+ * #D4A62A gold): gold primary, warm-tinted neutral surfaces and a blue
+ * tertiary (a nod to 3DESIGN). The upstream ink-* / kerf-* token names are
+ * kept and mapped onto the M3 roles so every existing component follows. */
 @theme {
-  --font-sans: "Inter", "Geist", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-display: "Geist", "Inter", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-sans: "Roboto Flex Variable", "Roboto Flex", "Roboto", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Roboto Flex Variable", "Roboto Flex", "Roboto", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Roboto Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
-  /* Surfaces — navy, darkest first */
-  --color-ink-950: #0a1030;
-  --color-ink-900: #0f1840;
-  --color-ink-850: #14204f;
-  --color-ink-800: #1b2a60;
-  --color-ink-700: #263873;
-  --color-ink-600: #33478a;
-  --color-ink-500: #4a5fa3;
-  --color-ink-400: #7787bd;
-  --color-ink-300: #a3b0da;
-  --color-ink-200: #c8d0ec;
-  --color-ink-100: #e7ebf8;
-  --color-ink-50:  #f5f7fd;
+  /* Neutral surfaces → ink-* (darkest first) */
+  --color-ink-950: #110e07; /* surface-container-lowest */
+  --color-ink-900: #17130b; /* surface */
+  --color-ink-850: #1f1b13; /* surface-container-low */
+  --color-ink-800: #231f17; /* surface-container */
+  --color-ink-700: #2e2920; /* surface-container-high */
+  --color-ink-600: #4e4635; /* outline-variant */
+  --color-ink-500: #675d4b;
+  --color-ink-400: #9a8f7b; /* outline */
+  --color-ink-300: #d2c5af; /* on-surface-variant */
+  --color-ink-200: #e2d9cb;
+  --color-ink-100: #ebe1d3; /* on-surface */
+  --color-ink-50:  #f9efe1;
 
-  /* Accent — gold (token names kept from upstream so every component follows) */
-  --color-kerf-50:  #fdf7e3;
-  --color-kerf-100: #fbebb8;
-  --color-kerf-200: #f8db84;
-  --color-kerf-300: #f2c64f;
-  --color-kerf-400: #e3ad2a;
-  --color-kerf-500: #c48f16;
-  --color-kerf-600: #946b0f;
-  --color-kerf-700: #624608;
+  /* Primary tonal palette → kerf-* */
+  --color-kerf-50:  #ffefd2; /* T95 */
+  --color-kerf-100: #ffdf99; /* T90 primary-fixed / on-primary-container */
+  --color-kerf-200: #ffd573; /* T87 */
+  --color-kerf-300: #f1c043; /* T80 primary */
+  --color-kerf-400: #d3a529; /* T70 */
+  --color-kerf-500: #b58a03; /* T60 */
+  --color-kerf-600: #775a00; /* T40 */
+  --color-kerf-700: #5a4300; /* T30 primary-container */
 
-  /* Accents */
-  --color-cyan-edge: #6bd4ff;
-  --color-magenta-edge: #ff6bd4;
+  --color-cyan-edge: #aec6ff;
+  --color-magenta-edge: #ffb4ab;
 
-  /* 3Design-style panel chrome */
-  --color-panel-top: #17235a;
-  --color-panel-mid: #2b3f93;
-  --color-panel-bottom: #121c4a;
-  --color-select: #4aa3ff;
+  /* M3 system colour roles */
+  --color-m3-primary: #f1c043;
+  --color-m3-on-primary: #3f2e00;
+  --color-m3-primary-container: #5a4300;
+  --color-m3-on-primary-container: #ffdf99;
+  --color-m3-secondary: #dec48a;
+  --color-m3-on-secondary: #3e2e03;
+  --color-m3-secondary-container: #564417;
+  --color-m3-on-secondary-container: #fcdfa4;
+  --color-m3-tertiary: #aec6ff;
+  --color-m3-on-tertiary: #002e6b;
+  --color-m3-tertiary-container: #0f4491;
+  --color-m3-on-tertiary-container: #d8e2ff;
+  --color-m3-error: #ffb4ab;
+  --color-m3-error-container: #93000a;
+  --color-m3-surface: #17130b;
+  --color-m3-surface-bright: #3e392f;
+  --color-m3-surface-container-lowest: #110e07;
+  --color-m3-surface-container-low: #1f1b13;
+  --color-m3-surface-container: #231f17;
+  --color-m3-surface-container-high: #2e2920;
+  --color-m3-surface-container-highest: #39342b;
+  --color-m3-on-surface: #ebe1d3;
+  --color-m3-on-surface-variant: #d2c5af;
+  --color-m3-outline: #9a8f7b;
+  --color-m3-outline-variant: #4e4635;
+
+  /* Selection highlight (tree row, picks) */
+  --color-select: #aec6ff;
 }
 
-/* Side panels get the vertical navy sheen of 3Design's Tree / Tools panes. */
+/* M3 Expressive shape + motion tokens */
+:root {
+  --m3-shape-xs: 4px;
+  --m3-shape-sm: 8px;
+  --m3-shape-md: 12px;
+  --m3-shape-lg: 16px;
+  --m3-shape-lg-inc: 20px;
+  --m3-shape-xl: 28px;
+  --m3-shape-xl-inc: 32px;
+  --m3-shape-full: 9999px;
+  /* Expressive spring motion (spatial = overshoot, effects = no overshoot) */
+  --m3-spring-fast-spatial: cubic-bezier(0.42, 1.67, 0.21, 0.9);
+  --m3-spring-default-spatial: cubic-bezier(0.38, 1.21, 0.22, 1);
+  --m3-spring-fast-effects: cubic-bezier(0.31, 0.94, 0.34, 1);
+  --m3-dur-fast: 350ms;
+  --m3-dur-default: 500ms;
+  --m3-dur-effects: 150ms;
+  font-optical-sizing: auto;
+}
+
+/* ── Goldsmith workspace in M3 Expressive ─────────────────────────────────── */
+
+/* Pane = surface-container card, extra-large shape. */
 .zl-panel {
-  background: linear-gradient(180deg, var(--color-panel-top) 0%, var(--color-panel-mid) 45%, var(--color-panel-bottom) 100%);
+  background: var(--color-m3-surface-container);
+  border-radius: var(--m3-shape-xl);
 }
+.zl-col { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
 
-/* Silver tab header ("Strom", "Vlastnosti", "Nástroje" …). */
+/* Pane title: M3 Expressive emphasized "title large" (wider, heavier Roboto Flex). */
 .zl-tab {
-  background: linear-gradient(180deg, #f4f6fb 0%, #c9d0e0 55%, #aeb7cc 100%);
-  color: #10183f;
-  border: 1px solid #8d97b3;
-  border-bottom: none;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+  color: var(--color-m3-on-surface);
+  font-size: 21px;
+  line-height: 28px;
+  font-weight: 720;
+  font-stretch: 108%;
+  letter-spacing: -0.005em;
+}
+/* Small caps-style section label (PRSTENY, KAMENY …) in primary. */
+.zl-section-label {
+  color: var(--color-m3-primary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
-/* Glossy round tool button, a cleaner take on 3Design's icon tiles. */
+/* Expressive icon button. The outline is a clip-path polygon from
+ * lib/zlatnik/m3shapes.ts (--shape at rest, --shape-hover on hover/focus,
+ * --shape-press while pressed); all share one vertex count, so the spring
+ * transition genuinely morphs cookie → circle → squircle. */
 .zl-tool {
-  background: radial-gradient(120% 120% at 30% 20%, #4f67b8 0%, #26397a 55%, #18265a 100%);
-  border: 1px solid rgba(160, 180, 235, 0.35);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 1px 2px rgba(0, 0, 0, 0.45);
+  clip-path: var(--shape);
+  background: var(--color-kerf-100);
+  color: #251a00;
+  transition:
+    clip-path var(--m3-dur-default) var(--m3-spring-default-spatial),
+    transform var(--m3-dur-fast) var(--m3-spring-fast-spatial),
+    background-color var(--m3-dur-effects) var(--m3-spring-fast-effects),
+    color var(--m3-dur-effects) var(--m3-spring-fast-effects);
 }
-.zl-tool:hover {
-  background: radial-gradient(120% 120% at 30% 20%, #6a83d6 0%, #3149a0 55%, #1d2e6c 100%);
-  border-color: rgba(242, 198, 79, 0.7);
+.zl-tool[data-tone="tertiary"] { background: var(--color-m3-tertiary); color: #001a43; }
+button:hover:not(:disabled) > .zl-tool,
+button:focus-visible > .zl-tool {
+  clip-path: var(--shape-hover);
+  transform: scale(1.06) rotate(-6deg);
 }
-.zl-tool:active {
-  transform: translateY(1px);
+button:hover:not(:disabled) > .zl-tool { background: var(--color-m3-primary); color: var(--color-m3-on-primary); }
+button:hover:not(:disabled) > .zl-tool[data-tone="tertiary"] { background: #d8e2ff; color: #001a43; }
+button:active:not(:disabled) > .zl-tool {
+  clip-path: var(--shape-press);
+  transform: scale(0.9);
+}
+button:disabled > .zl-tool { background: var(--color-m3-surface-container-highest); color: var(--color-m3-outline); }
+
+/* Buttons: full-pill shape + spring press. */
+.m3-btn {
+  border-radius: var(--m3-shape-full);
+  transition:
+    border-radius var(--m3-dur-fast) var(--m3-spring-fast-spatial),
+    transform var(--m3-dur-fast) var(--m3-spring-fast-spatial),
+    background-color var(--m3-dur-effects) var(--m3-spring-fast-effects),
+    color var(--m3-dur-effects) var(--m3-spring-fast-effects),
+    box-shadow var(--m3-dur-effects) var(--m3-spring-fast-effects);
+}
+.m3-btn:active:not(:disabled) { border-radius: var(--m3-shape-md); transform: scale(0.96); }
+.m3-btn-filled { background: var(--color-m3-primary); color: var(--color-m3-on-primary); }
+.m3-btn-filled:hover:not(:disabled) { box-shadow: 0 1px 3px rgba(0,0,0,.4), 0 4px 10px rgba(241,192,67,.18); background: #f6cb5f; }
+.m3-btn-tonal { background: var(--color-m3-secondary-container); color: var(--color-m3-on-secondary-container); }
+.m3-btn-tonal:hover:not(:disabled) { background: #625023; }
+.m3-btn-text { color: var(--color-m3-primary); }
+.m3-btn-text:hover:not(:disabled) { background: color-mix(in srgb, var(--color-m3-primary) 10%, transparent); }
+
+/* Connected button group (M3 Expressive): segments share inner corners of
+ * 8px; the selected segment morphs to a full pill. */
+.m3-group { display: inline-flex; gap: 2px; }
+.m3-group > button {
+  height: 36px;
+  min-width: 44px;
+  padding: 0 14px;
+  font-weight: 600;
+  font-size: 13px;
+  background: var(--color-m3-surface-container-highest);
+  color: var(--color-m3-on-surface);
+  border-radius: var(--m3-shape-sm);
+  transition:
+    border-radius var(--m3-dur-fast) var(--m3-spring-fast-spatial),
+    background-color var(--m3-dur-effects) var(--m3-spring-fast-effects),
+    color var(--m3-dur-effects) var(--m3-spring-fast-effects),
+    transform var(--m3-dur-fast) var(--m3-spring-fast-spatial);
+}
+.m3-group > button:first-child { border-top-left-radius: var(--m3-shape-full); border-bottom-left-radius: var(--m3-shape-full); }
+.m3-group > button:last-child { border-top-right-radius: var(--m3-shape-full); border-bottom-right-radius: var(--m3-shape-full); }
+.m3-group > button:hover { background: #4a4337; }
+.m3-group > button[aria-pressed="true"] {
+  background: var(--color-m3-secondary-container);
+  color: var(--color-m3-on-secondary-container);
+  border-radius: var(--m3-shape-full);
+}
+.m3-group > button:active { transform: scale(0.94); border-radius: var(--m3-shape-md); }
+
+/* List item (tree row): selected = full pill on secondary container. */
+.m3-list-item {
+  border-radius: var(--m3-shape-full);
+  transition:
+    background-color var(--m3-dur-effects) var(--m3-spring-fast-effects),
+    border-radius var(--m3-dur-fast) var(--m3-spring-fast-spatial);
+}
+.m3-list-item:hover { background: color-mix(in srgb, var(--color-m3-on-surface) 8%, transparent); }
+.m3-list-item[aria-selected="true"] {
+  background: var(--color-m3-tertiary);
+  color: #001a43;
+}
+
+/* Inside the workspace every form control becomes an M3 outlined field. */
+[data-testid="zl-workspace"] input[type="number"],
+[data-testid="zl-workspace"] input[type="text"],
+[data-testid="zl-workspace"] select {
+  border-radius: var(--m3-shape-md) !important;
+  border: 1px solid var(--color-m3-outline) !important;
+  background-color: transparent !important;
+  color: var(--color-m3-on-surface) !important;
+  min-height: 40px;
+  transition: border-color var(--m3-dur-effects) var(--m3-spring-fast-effects), box-shadow var(--m3-dur-effects) var(--m3-spring-fast-effects);
+}
+[data-testid="zl-workspace"] input[type="number"]:hover,
+[data-testid="zl-workspace"] input[type="text"]:hover,
+[data-testid="zl-workspace"] select:hover { border-color: var(--color-m3-on-surface) !important; }
+[data-testid="zl-workspace"] input[type="number"]:focus,
+[data-testid="zl-workspace"] input[type="text"]:focus,
+[data-testid="zl-workspace"] select:focus {
+  outline: none;
+  border-color: var(--color-m3-primary) !important;
+  box-shadow: inset 0 0 0 1px var(--color-m3-primary);
+}
+[data-testid="zl-workspace"] select option { background: var(--color-m3-surface-container-high); }
+[data-testid="zl-workspace"] input[type="checkbox"] { accent-color: var(--color-m3-primary); width: 18px; height: 18px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .zl-tool, .m3-btn, .m3-group > button, .m3-list-item { transition: none !important; }
 }
 
 html, body, #root {
@@ -181,15 +339,17 @@ body {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
+  gap: 8px;
+  padding: 0 8px;
 }
 @media (min-width: 768px) {
-  .zl-feature-grid { grid-template-columns: 250px minmax(0, 1fr); }
+  .zl-feature-grid { grid-template-columns: 268px minmax(0, 1fr); }
 }
 @media (min-width: 1024px) {
-  .zl-feature-grid { grid-template-columns: 260px minmax(0, 1fr) 290px; }
+  .zl-feature-grid { grid-template-columns: 276px minmax(0, 1fr) 316px; }
 }
 @media (min-width: 1800px) {
-  .zl-feature-grid { grid-template-columns: 300px minmax(0, 1fr) 320px; }
+  .zl-feature-grid { grid-template-columns: 320px minmax(0, 1fr) 360px; }
 }
 @media (min-width: 1024px) {
   .kerf-editor-grid.zl-files-collapsed { grid-template-columns: 34px 1fr; }

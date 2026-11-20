@@ -6155,7 +6155,8 @@ export default function FeatureView({
   // Bodies a modify tool can work on (boolean results replace their operands; stones excluded).
   const bodyCount = useMemo(() => liveBodies(tree as never).filter((n) => n.op !== 'gemstone').length, [tree])
 
-  const setView = useCallback((v: ViewName) => rendererRef.current?.setView(v), [])
+  const [activeView, setActiveView] = useState<ViewName | null>(null)
+  const setView = useCallback((v: ViewName) => { setActiveView(v); rendererRef.current?.setView(v) }, [])
 
   // Metal weight (3DESIGN "Informace"): gemstone bodies excluded.
   const metalInfo = useMemo(() => {
@@ -6261,27 +6262,25 @@ export default function FeatureView({
       onClick={() => setView(v)}
       title={label}
       aria-label={label}
-      className="h-7 min-w-7 px-1.5 rounded-md text-[11px] font-semibold text-ink-100 border border-ink-600/80 bg-ink-850 hover:border-kerf-300/70 hover:text-kerf-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kerf-300/60"
+      aria-pressed={activeView === v}
+      className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-m3-primary)]"
     >
       {short}
     </button>
   )
   return (
-    <div className="absolute inset-0 flex flex-col bg-ink-950 text-ink-100" data-testid="zl-workspace">
+    <div className="absolute inset-0 flex flex-col bg-[var(--color-m3-surface)] text-[var(--color-m3-on-surface)]" data-testid="zl-workspace">
       {/* Toolbar — catalog popover, metal, standard views, pick modes. */}
-      <div className="relative z-30 border-b border-ink-950 bg-gradient-to-b from-ink-700 to-ink-850 px-2 h-11 flex items-center gap-2 min-w-0">
+      <div className="relative z-30 px-3 h-16 flex items-center gap-2.5 min-w-0">
         <AddFeaturePopover onPick={(op) => addFeature(op)} />
-        <span className="w-px h-5 bg-ink-600 flex-shrink-0" aria-hidden="true" />
-        <span className="hidden xl:inline text-xs text-ink-100 font-medium truncate max-w-[160px] flex-shrink-0" title={fileName}>{fileName}</span>
-        <span className="w-px h-5 bg-ink-600 flex-shrink-0" aria-hidden="true" />
-        <label className="flex items-center gap-1.5 text-[11px] text-ink-200 flex-shrink-0">
-          Kov
+        <label className="flex items-center gap-2 text-[12px] font-medium text-[var(--color-m3-on-surface-variant)] flex-shrink-0">
+          <span className="hidden xl:inline">Kov</span>
           <select
             value={metal}
             onChange={(e) => setMetal(e.target.value)}
             aria-label="Kov"
             data-testid="zl-metal"
-            className="h-7 px-1.5 rounded-md bg-ink-900 border border-ink-600 text-[12px] text-ink-50 focus:outline-none focus:border-kerf-300/70"
+            className="!rounded-full h-10 pl-4 pr-8 text-[13px] font-medium"
           >
             <option value="18k_yellow">Žluté zlato 18k (750)</option>
             <option value="14k_yellow">Žluté zlato 14k (585)</option>
@@ -6293,23 +6292,21 @@ export default function FeatureView({
             <option value="platinum_950">Platina 950</option>
           </select>
         </label>
-        <span className="w-px h-5 bg-ink-600 flex-shrink-0" aria-hidden="true" />
-        <div className="flex items-center gap-1 flex-shrink-0" role="group" aria-label="Pohled">
+        <div className="m3-group flex-shrink-0" role="group" aria-label="Pohled">
           {viewBtn('iso', 'Izometrický pohled', 'ISO')}
           {viewBtn('front', 'Pohled zepředu', 'Zp')}
           {viewBtn('top', 'Pohled shora', 'Sh')}
           {viewBtn('right', 'Pohled zprava', 'Zl')}
-          <button
-            type="button"
-            onClick={() => rendererRef.current?.zoomAll()}
-            title="Zoom vše"
-            aria-label="Zoom vše"
-            className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-100 border border-ink-600/80 bg-ink-850 hover:border-kerf-300/70 hover:text-kerf-100"
-          >
-            <Focus size={13} aria-hidden="true" />
-          </button>
         </div>
-        <span className="w-px h-5 bg-ink-600 flex-shrink-0" aria-hidden="true" />
+        <button
+          type="button"
+          onClick={() => { setActiveView(null); rendererRef.current?.zoomAll() }}
+          title="Zoom vše"
+          aria-label="Zoom vše"
+          className="m3-btn m3-btn-tonal h-10 w-10 inline-flex items-center justify-center flex-shrink-0"
+        >
+          <Focus size={17} aria-hidden="true" />
+        </button>
         <div className="relative flex-shrink-0" ref={exportRef}>
           <button
             type="button"
@@ -6317,14 +6314,14 @@ export default function FeatureView({
             aria-haspopup="menu"
             aria-expanded={exportOpen}
             data-testid="zl-export"
-            className="h-7 inline-flex items-center gap-1.5 px-2.5 rounded-md text-[12px] font-semibold bg-kerf-300 text-ink-950 hover:bg-kerf-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kerf-300/60"
+            className="m3-btn m3-btn-filled h-10 inline-flex items-center gap-2 pl-4 pr-3 text-[14px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-m3-surface)] focus-visible:ring-[var(--color-m3-primary)]"
           >
-            <FileDown size={13} aria-hidden="true" />
+            <FileDown size={17} aria-hidden="true" />
             Export
-            <ChevronDown size={12} aria-hidden="true" />
+            <ChevronDown size={15} aria-hidden="true" />
           </button>
           {exportOpen && (
-            <div role="menu" className="absolute left-0 top-full mt-1 z-50 w-64 rounded-lg border border-ink-600 bg-ink-850 shadow-2xl shadow-black/60 py-1 text-[12.5px]">
+            <div role="menu" className="absolute left-0 top-full mt-2 z-50 w-72 rounded-[var(--m3-shape-lg)] bg-[var(--color-m3-surface-container-high)] shadow-2xl shadow-black/60 p-2 text-[13px]">
               {[
                 { f: 'stl-binary', metalOnly: true, label: 'STL — jen kov', sub: 'pro odlití / tisk vosku' },
                 { f: 'stl-binary', metalOnly: false, label: 'STL — vše (kov + kameny)', sub: '' },
@@ -6338,10 +6335,10 @@ export default function FeatureView({
                   role="menuitem"
                   onClick={() => { void doExport(o.f, o.metalOnly) }}
                   data-testid={`zl-export-${o.f}-${o.metalOnly ? 'metal' : 'all'}`}
-                  className="w-full text-left px-3 py-1.5 hover:bg-ink-700 focus-visible:outline-none focus-visible:bg-ink-700"
+                  className="m3-list-item w-full text-left px-4 py-2 rounded-[var(--m3-shape-md)] focus-visible:outline-none focus-visible:bg-[var(--color-m3-secondary-container)]"
                 >
-                  <div className="text-ink-50">{o.label}</div>
-                  {o.sub && <div className="text-[11px] text-ink-300">{o.sub}</div>}
+                  <div className="text-[var(--color-m3-on-surface)] font-medium">{o.label}</div>
+                  {o.sub && <div className="text-[11.5px] text-[var(--color-m3-on-surface-variant)]">{o.sub}</div>}
                 </button>
               ))}
             </div>
@@ -6385,8 +6382,8 @@ export default function FeatureView({
 
       <div className="flex-1 min-h-0 relative zl-feature-grid">
         {/* Left: Strom + Vlastnosti */}
-        <aside className="zl-panel hidden md:flex flex-col min-h-0 border-r border-ink-950" aria-label="Strom a vlastnosti">
-          <ZlPanel title="Strom" className="flex-[2] min-h-[140px]" testId="zl-panel-tree">
+        <aside className="zl-col hidden md:flex" aria-label="Strom a vlastnosti">
+          <ZlPanel title="Strom" className="flex-[2] min-h-[150px]" testId="zl-panel-tree">
             <FeatureTreePanel
               tree={tree}
               selectedId={selectedId}
@@ -6403,11 +6400,11 @@ export default function FeatureView({
           </ZlPanel>
           <ZlPanel
             title="Vlastnosti"
-            className="flex-[3] min-h-[200px] border-t border-ink-950"
+            className="flex-[3] min-h-[220px]"
             testId="zl-panel-props"
             actions={(
               <>
-                <ZlIconButton label="Hotovo" tone="ok" disabled={!selectedFeature} onClick={() => setSelectedId(null)} testId="zl-props-done"><Check size={15} /></ZlIconButton>
+                <ZlIconButton label="Hotovo" tone="ok" disabled={!selectedFeature} onClick={() => setSelectedId(null)} testId="zl-props-done"><Check size={18} strokeWidth={2.6} /></ZlIconButton>
                 <ZlIconButton
                   label="Smazat prvek"
                   tone="danger"
@@ -6416,9 +6413,9 @@ export default function FeatureView({
                     if (selectedFeature && confirm(`Smazat „${opLabel(selectedFeature.op, KIND_BY_OP[selectedFeature.op]?.label)}“?`)) removeFeature(selectedFeature.id)
                   }}
                   testId="zl-props-delete"
-                ><X size={15} /></ZlIconButton>
-                <ZlIconButton label="Zpět (Ctrl+Z)" onClick={() => { void undoLastRevision() }}><Undo2 size={14} /></ZlIconButton>
-                <ZlIconButton label="Znovu (Ctrl+Shift+Z)" disabled={!redoAvailable} onClick={() => { void redoRevision() }}><Redo2 size={14} /></ZlIconButton>
+                ><X size={17} /></ZlIconButton>
+                <ZlIconButton label="Zpět (Ctrl+Z)" onClick={() => { void undoLastRevision() }}><Undo2 size={16} /></ZlIconButton>
+                <ZlIconButton label="Znovu (Ctrl+Shift+Z)" disabled={!redoAvailable} onClick={() => { void redoRevision() }}><Redo2 size={16} /></ZlIconButton>
               </>
             )}
           >
@@ -6427,7 +6424,7 @@ export default function FeatureView({
         </aside>
 
         {/* Centre: viewport */}
-        <main className="relative min-h-0 min-w-0 h-full">
+        <main className="relative min-h-0 min-w-0 h-full rounded-[var(--m3-shape-xl)] overflow-hidden">
           <FeatureRenderer
             ref={rendererRef}
             meshes={meshes}
@@ -6444,23 +6441,23 @@ export default function FeatureView({
             className="w-full h-full"
           />
           {evalState.loading && (
-            <div className="absolute top-3 left-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-ink-900/85 backdrop-blur border border-ink-600 text-[11px] text-ink-100 shadow-lg shadow-black/30">
-              <Loader2 size={11} className="animate-spin text-kerf-300" aria-hidden="true" />
+            <div className="absolute top-4 left-4 inline-flex items-center gap-2 px-4 h-9 rounded-full bg-[var(--color-m3-surface-container-high)]/90 backdrop-blur text-[12.5px] font-medium text-[var(--color-m3-on-surface)] shadow-lg shadow-black/30">
+              <Loader2 size={14} className="animate-spin text-[var(--color-m3-primary)]" aria-hidden="true" />
               <span>Počítám model…</span>
             </div>
           )}
           {!evalState.loading && tree.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="max-w-sm text-center px-6 py-5 rounded-xl bg-ink-950/55 border border-ink-600/60 backdrop-blur-sm">
-                <div className="text-base font-semibold text-ink-50">Prázdný model</div>
-                <div className="mt-1.5 text-[13px] text-ink-200 leading-relaxed">
+              <div className="max-w-sm text-center px-7 py-6 rounded-[var(--m3-shape-xl)] bg-[var(--color-m3-surface-container)]/85 backdrop-blur-sm shadow-xl shadow-black/30">
+                <div className="text-[22px] font-bold text-[var(--color-m3-on-surface)]" style={{ fontStretch: '108%' }}>Prázdný model</div>
+                <div className="mt-2 text-[14px] text-[var(--color-m3-on-surface-variant)] leading-relaxed">
                   Začněte v panelu <span className="text-kerf-200">Nástroje</span> — např. <span className="text-kerf-200">Prsteny → Solitér</span> vytvoří hotový prsten s kamenem.
                 </div>
               </div>
             </div>
           )}
           {featurePickMode && (
-            <div className="absolute top-3 right-3 inline-flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-md bg-kerf-300/15 backdrop-blur border border-kerf-300/40 text-[11px] text-kerf-100 shadow-lg shadow-black/30">
+            <div className="absolute top-4 right-4 inline-flex items-center gap-2 pl-3.5 pr-1.5 h-9 rounded-full bg-[var(--color-m3-tertiary)] text-[12.5px] font-medium text-[#001a43] shadow-lg shadow-black/30">
               <Crosshair size={11} aria-hidden="true" />
               <span>
                 {featurePickMode === 'pushpull' && 'Táhnout · chyťte plochu'}
@@ -6488,25 +6485,25 @@ export default function FeatureView({
         </main>
 
         {/* Right: Nástroje + Nápověda */}
-        <aside className="zl-panel hidden lg:flex flex-col min-h-0 border-l border-ink-950" aria-label="Nástroje a nápověda">
-          <ZlPanel title="Nástroje" className="flex-[3] min-h-[200px]" testId="zl-panel-tools">
+        <aside className="zl-col hidden lg:flex" aria-label="Nástroje a nápověda">
+          <ZlPanel title="Nástroje" className="flex-[3] min-h-[220px]" testId="zl-panel-tools">
             {toolPalette}
           </ZlPanel>
-          <ZlPanel title="Nápověda" className="flex-[1] min-h-[110px] border-t border-ink-950" testId="zl-panel-help">
-            <div className="px-3 py-2.5 text-[12px] leading-relaxed text-ink-100" data-testid="zl-help">
+          <ZlPanel title="Nápověda" className="flex-[1] min-h-[130px]" testId="zl-panel-help">
+            <div className="px-5 pb-4 text-[13px] leading-relaxed text-[var(--color-m3-on-surface-variant)]" data-testid="zl-help">
               {helpText ? (
                 <>
-                  <div className="flex items-center gap-1.5 mb-1 text-kerf-200 font-semibold">
-                    <HelpCircle size={13} aria-hidden="true" />
+                  <div className="flex items-center gap-2 mb-1.5 text-[var(--color-m3-tertiary)] font-semibold text-[14px]">
+                    <HelpCircle size={16} aria-hidden="true" />
                     {helpTool ? helpTool.label : selectedFeature ? opLabel(selectedFeature.op, KIND_BY_OP[selectedFeature.op]?.label) : ''}
                   </div>
                   {helpText}
                 </>
               ) : (
-                <ul className="space-y-1 text-ink-200">
-                  <li><b className="text-ink-50">Otáčení:</b> levé tlačítko myši</li>
-                  <li><b className="text-ink-50">Posun:</b> pravé tlačítko myši</li>
-                  <li><b className="text-ink-50">Zoom:</b> kolečko myši</li>
+                <ul className="space-y-1">
+                  <li><b className="text-[var(--color-m3-on-surface)]">Otáčení:</b> levé tlačítko myši</li>
+                  <li><b className="text-[var(--color-m3-on-surface)]">Posun:</b> pravé tlačítko myši</li>
+                  <li><b className="text-[var(--color-m3-on-surface)]">Zoom:</b> kolečko myši</li>
                   <li>Najetím na nástroj se zde ukáže popis.</li>
                 </ul>
               )}
@@ -6536,7 +6533,7 @@ export default function FeatureView({
       </aside>
 
       {/* Status bar */}
-      <div className="flex items-center gap-3 px-3 h-7 border-t border-ink-950 bg-ink-900 text-[11px] font-mono text-ink-300 flex-shrink-0" data-testid="zl-status">
+      <div className="flex items-center gap-3 mx-2 my-2 pl-5 pr-28 h-10 rounded-full bg-[var(--color-m3-surface-container)] text-[12px] text-[var(--color-m3-on-surface-variant)] flex-shrink-0" data-testid="zl-status">
         {evalState.error ? (
           <span className="inline-flex items-center gap-1.5 text-red-300 min-w-0" data-testid="zl-eval-error">
             <AlertTriangle size={11} className="flex-shrink-0" aria-hidden="true" />
@@ -6558,11 +6555,11 @@ export default function FeatureView({
           </span>
         )}
         {metalInfo.vol > 0 && (
-          <span className="inline-flex items-center gap-1.5 text-kerf-100" data-testid="zl-weight" title={`Objem kovu ${metalInfo.vol.toFixed(1)} mm³ · hustota podle slitiny`}>
+          <span className="inline-flex items-center gap-1.5 px-3 h-7 rounded-full bg-[var(--color-m3-primary-container)] text-[var(--color-m3-on-primary-container)]" data-testid="zl-weight" title={`Objem kovu ${metalInfo.vol.toFixed(1)} mm³ · hustota podle slitiny`}>
             <Scale size={11} aria-hidden="true" />
             <span>{METAL_SHORT[metal] || metal}:</span>
-            <b className="text-kerf-200">{formatGrams(metalInfo.grams)}</b>
-            <span className="text-ink-400">({metalInfo.vol.toLocaleString('cs-CZ', { maximumFractionDigits: 1 })} mm³)</span>
+            <b>{formatGrams(metalInfo.grams)}</b>
+            <span className="opacity-70">({metalInfo.vol.toLocaleString('cs-CZ', { maximumFractionDigits: 1 })} mm³)</span>
           </span>
         )}
         {exportError && <span className="text-red-300 truncate" title={exportError}>{exportError}</span>}
@@ -6592,7 +6589,7 @@ export default function FeatureView({
           type="button"
           onClick={() => triggerEvaluate()}
           aria-label="Přepočítat"
-          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-ink-200 hover:text-kerf-300 hover:bg-ink-800"
+          className="m3-btn m3-btn-text inline-flex items-center gap-1.5 px-3 h-8 font-semibold"
           title="Přepočítat model"
         >
           <Play size={10} aria-hidden="true" />
@@ -6613,13 +6610,13 @@ function ToolsDrawer({ children }: { children: React.ReactNode }) {
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="absolute bottom-3 right-3 z-20 inline-flex items-center gap-1.5 px-3 h-9 rounded-full bg-kerf-300 text-ink-950 text-sm font-semibold shadow-lg shadow-black/40"
+        className="m3-btn absolute bottom-4 right-4 z-20 inline-flex items-center gap-2 px-5 h-14 !rounded-[var(--m3-shape-lg)] bg-[var(--color-m3-primary-container)] text-[var(--color-m3-on-primary-container)] text-[15px] font-semibold shadow-xl shadow-black/40"
       >
-        <Wrench size={14} aria-hidden="true" />
+        <Wrench size={20} aria-hidden="true" />
         Nástroje
       </button>
       {open && (
-        <div className="absolute top-2 right-2 bottom-14 z-20 w-[290px] max-w-[85%] zl-panel rounded-xl border border-ink-600 shadow-2xl shadow-black/60 overflow-y-auto" onClick={(e) => { if ((e.target as HTMLElement).closest('[data-testid^="zl-tool-"]')) setOpen(false) }}>
+        <div className="absolute top-3 right-3 bottom-20 z-20 w-[316px] max-w-[88%] zl-panel shadow-2xl shadow-black/60 overflow-y-auto pt-3" onClick={(e) => { if ((e.target as HTMLElement).closest('[data-testid^="zl-tool-"]')) setOpen(false) }}>
           {children}
         </div>
       )}
@@ -6719,19 +6716,17 @@ function AddFeaturePopover({ onPick }: { onPick: (op: string) => void }) {
         aria-label="Další operace — celý katalog prvků"
         aria-expanded={open}
         aria-haspopup="menu"
-        className={`inline-flex items-center gap-1.5 pl-2 pr-2.5 py-1.5 rounded-md border text-xs font-medium transition-colors
-          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kerf-300/60
-          ${open
-            ? 'border-kerf-300/60 bg-kerf-300/15 text-kerf-100'
-            : 'border-ink-700 bg-ink-850 text-ink-100 hover:bg-ink-800 hover:border-ink-600'}`}
-        title="Add a feature to the timeline"
+        className={`m3-btn m3-btn-tonal inline-flex items-center gap-2 pl-3.5 pr-3 h-10 text-[13.5px] font-semibold
+          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-m3-primary)]
+          ${open ? '!rounded-[var(--m3-shape-md)]' : ''}`}
+        title="Celý katalog prvků"
       >
-        <Plus size={13} aria-hidden="true" className={open ? 'text-kerf-200' : 'text-kerf-300'} />
-        <span>Další operace</span>
+        <Plus size={17} aria-hidden="true" />
+        <span className="whitespace-nowrap">Další operace</span>
         <ChevronDown
-          size={11}
+          size={15}
           aria-hidden="true"
-          className={`text-ink-400 transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`transition-transform ${open ? 'rotate-180' : ''}`}
         />
       </button>
 
